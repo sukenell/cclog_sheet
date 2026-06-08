@@ -697,10 +697,10 @@ function App() {
               type="button"
               className="icon-button"
               onClick={() => void copyCharacterToClipboard()}
-              title={gameSystem === 'insane' ? '채팅 팔레트를 복사' : '캐릭터 데이터를 복사'}
+              title="팔레트를 복사"
             >
               <Clipboard size={18} />
-              <span>{gameSystem === 'insane' ? '팔레트 복사' : '데이터 복사'}</span>
+              <span>팔레트 복사</span>
             </button>
             {/* 저장됨 버튼은 기능치 확정 전까지 숨김. */}
             <button type="button" className="icon-button danger" onClick={resetSheet} title="초기화">

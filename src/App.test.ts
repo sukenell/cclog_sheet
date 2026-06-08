@@ -34,6 +34,9 @@ describe('topbar archive controls', () => {
 
     expect(source).toContain('getInsanePaletteCopyError(insaneSheet)');
     expect(source).toContain('serializeInsaneCcfoliaCharacter(insaneSheet)');
+    expect(source).toContain('<span>팔레트 복사</span>');
+    expect(source).toContain('title="팔레트를 복사"');
+    expect(source).not.toContain('데이터 복사');
     expect(source).not.toContain('TextArea label="코코포리아 API / 채팅팔레트"');
   });
 
