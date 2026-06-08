@@ -15,7 +15,9 @@ describe('basic investigator info', () => {
       occupation: '',
       age: '',
       gender: '',
+      color: '',
       birthplace: '',
+      imageUrl: '',
     });
   });
 
@@ -33,7 +35,15 @@ describe('basic investigator info', () => {
       occupation: '',
       age: '',
       gender: '',
+      color: '',
       birthplace: '',
+      imageUrl: '',
+    });
+  });
+
+  it('keeps a portrait image URL in basic info', () => {
+    expect(normalizeBasicInfo({ imageUrl: 'https://example.com/portrait.png' })).toMatchObject({
+      imageUrl: 'https://example.com/portrait.png',
     });
   });
 

@@ -6,11 +6,12 @@ import {
 } from './sections';
 
 describe('section open state', () => {
-  it('starts investigator info and characteristics open while the other sheet sections stay collapsed', () => {
+  it('starts the top sheet cards and characteristics open while the other sheet sections stay collapsed', () => {
     const state = createInitialSectionOpenState();
 
-    expect(sheetSectionIds).toHaveLength(7);
+    expect(sheetSectionIds).toHaveLength(8);
     expect(state.basic).toBe(true);
+    expect(state.insaneBasic2).toBe(true);
     expect(state.stats).toBe(true);
     expect(state.skills).toBe(false);
     expect(state.combat).toBe(false);

@@ -6,7 +6,9 @@ export interface BasicInfo {
   occupation: string;
   age: string;
   gender: string;
+  color: string;
   birthplace: string;
+  imageUrl: string;
 }
 
 export interface SanityInfo {
@@ -22,7 +24,9 @@ export function createDefaultBasicInfo(): BasicInfo {
     occupation: '',
     age: '',
     gender: '',
+    color: '',
     birthplace: '',
+    imageUrl: '',
   };
 }
 
@@ -38,7 +42,9 @@ export function normalizeBasicInfo(
     occupation: value?.occupation ?? fallback.occupation,
     age: value?.age ?? fallback.age,
     gender: value?.gender ?? fallback.gender,
+    color: value?.color ?? fallback.color,
     birthplace: value?.birthplace ?? fallback.birthplace,
+    imageUrl: value?.imageUrl ?? fallback.imageUrl,
   };
 }
 

@@ -1,5 +1,6 @@
 export const sheetSectionIds = [
   'basic',
+  'insaneBasic2',
   'stats',
   'skills',
   'combat',
@@ -14,6 +15,7 @@ export type SectionOpenState = Record<SheetSectionId, boolean>;
 export function createInitialSectionOpenState(): SectionOpenState {
   return {
     basic: true,
+    insaneBasic2: true,
     stats: true,
     skills: false,
     combat: false,
