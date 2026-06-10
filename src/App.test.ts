@@ -29,6 +29,12 @@ describe('topbar archive controls', () => {
     expect(source).not.toContain('<span>{systemLabel}</span>');
   });
 
+  it('orders CoC characteristic cards by the requested sheet layout', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain("const statOrder: StatKey[] = ['STR', 'DEX', 'POW', 'CON', 'APP', 'EDU', 'SIZ', 'INT'];");
+  });
+
   it('copies the InSane palette only from the toolbar after required fields are filled', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 

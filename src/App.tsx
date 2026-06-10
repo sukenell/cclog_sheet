@@ -145,7 +145,7 @@ const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
 const insaneStorageKey = 'cclog-sheet:insane:v1';
 const colorPickerFallback = '#68c870';
-const statOrder: StatKey[] = ['STR', 'CON', 'POW', 'DEX', 'APP', 'SIZ', 'INT', 'EDU'];
+const statOrder: StatKey[] = ['STR', 'DEX', 'POW', 'CON', 'APP', 'EDU', 'SIZ', 'INT'];
 
 const backstoryFields = [
   ['appearance', '외형'],
