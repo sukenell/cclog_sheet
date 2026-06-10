@@ -110,7 +110,7 @@ import {
   SanityInfo,
   syncSanityWithPow,
 } from './lib/sheet';
-import { parseSheetArchive, serializeSheetArchive } from './lib/sheetArchive';
+import { detectSheetArchiveSystem, parseSheetArchive, serializeSheetArchive } from './lib/sheetArchive';
 import { splitSkillsIntoColumns } from './lib/skillColumns';
 
 interface SheetState {
@@ -517,12 +517,16 @@ function App() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        if (gameSystem === 'insane') {
-          const imported = parseSheetArchive<Partial<InsaneSheetState>>(String(reader.result));
-          setInsaneSheet(normalizeInsaneSheet(imported));
+        const parsedArchive = parseSheetArchive<unknown>(String(reader.result));
+        const importedSystem = detectSheetArchiveSystem(parsedArchive);
+        const targetSystem = importedSystem === 'unknown' ? gameSystem : importedSystem;
+
+        setGameSystem(targetSystem);
+
+        if (targetSystem === 'insane') {
+          setInsaneSheet(normalizeInsaneSheet(parsedArchive));
         } else {
-          const imported = parseSheetArchive<SheetStateArchive>(String(reader.result));
-          setSheet(normalizeSheetState(imported));
+          setSheet(normalizeSheetState(parsedArchive as SheetStateArchive));
         }
       } catch {
         setGrowthMessage('가져오기 파일을 읽지 못했습니다.');

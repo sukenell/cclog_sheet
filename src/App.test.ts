@@ -19,6 +19,21 @@ describe('topbar archive controls', () => {
     ).toBe(false);
   });
 
+  it('switches to the archive system before importing JSON data', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const importStart = source.indexOf('function importJson');
+    const copyStart = source.indexOf('async function copyCharacterToClipboard', importStart);
+    const importBlock = source.slice(importStart, copyStart);
+
+    expect(source).toContain('detectSheetArchiveSystem');
+    expect(importBlock).toContain('const parsedArchive = parseSheetArchive<unknown>(String(reader.result));');
+    expect(importBlock).toContain('const importedSystem = detectSheetArchiveSystem(parsedArchive);');
+    expect(importBlock).toContain("const targetSystem = importedSystem === 'unknown' ? gameSystem : importedSystem;");
+    expect(importBlock).toContain('setGameSystem(targetSystem);');
+    expect(importBlock).toContain("if (targetSystem === 'insane')");
+    expect(importBlock).not.toContain("if (gameSystem === 'insane')");
+  });
+
   it('offers COC 7th edition and InSane as selectable sheet systems', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 
