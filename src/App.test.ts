@@ -61,6 +61,26 @@ describe('topbar archive controls', () => {
     expect(source).not.toContain('TextArea label="코코포리아 API / 채팅팔레트"');
   });
 
+  it('opens a CoC secret dice copy dialog from the toolbar', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const paletteButtonIndex = source.indexOf('<span>팔레트 복사</span>');
+    const secretDiceButtonIndex = source.indexOf('<span>비밀 주사위 복사</span>');
+
+    expect(source).toContain('buildSecretDiceRollOptions');
+    expect(source).toContain('serializeSecretDiceImport');
+    expect(secretDiceButtonIndex).toBeGreaterThan(paletteButtonIndex);
+    expect(source).toContain('title="비밀 주사위를 복사"');
+    expect(source).toContain('role="dialog"');
+    expect(source).toContain('전체 선택');
+    expect(source).toContain('전체 해제');
+    expect(source).toContain('characterName={topbarTitle}');
+    expect(source).toContain('복사 대상');
+    expect(source).toContain("copySecretDiceToClipboard('normal')");
+    expect(source).toContain('일반 주사위 복사');
+    expect(source).toContain("copySecretDiceToClipboard('bonus')");
+    expect(source).toContain('보정 주사위 복사');
+  });
+
   it('splits InSane basic information into the CoC two-card top layout', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const basicStart = source.indexOf('title="봉마인 정보"');

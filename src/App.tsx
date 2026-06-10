@@ -28,7 +28,11 @@ import {
 } from './data/skills';
 import {
   buildCharacterClipboardPayload,
+  buildSecretDiceRollOptions,
   serializeCharacterClipboardPayload,
+  serializeSecretDiceImport,
+  type SecretDiceRollOption,
+  type SecretDiceTemplateKind,
 } from './lib/clipboardExport';
 import {
   CombatArmor,
@@ -202,6 +206,8 @@ function App() {
   const [scenarioDraft, setScenarioDraft] = useState<ScenarioDraft>(createEmptyScenarioDraft);
   const [combatTab, setCombatTab] = useState<CombatTab>('weapons');
   const [weaponCategory, setWeaponCategory] = useState<WeaponCategory>('melee');
+  const [isSecretDiceDialogOpen, setIsSecretDiceDialogOpen] = useState(false);
+  const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const derived = useMemo(() => calculateDerivedStats(sheet.stats), [sheet.stats]);
@@ -222,6 +228,20 @@ function App() {
   const checkedSkillCount = sheet.skills.filter(
     (skill) => skill.checked && !isSkillGroup(skill),
   ).length;
+  const characterClipboardSource = useMemo(
+    () => ({
+      name: sheet.basic.name,
+      stats: sheet.stats,
+      sanity,
+      skills: sheet.skills,
+      weapons: sheet.weapons,
+    }),
+    [sanity, sheet.basic.name, sheet.skills, sheet.stats, sheet.weapons],
+  );
+  const secretDiceOptions = useMemo(
+    () => buildSecretDiceRollOptions(characterClipboardSource),
+    [characterClipboardSource],
+  );
 
   const filteredSkills = sortSkillsByKoreanName(
     sheet.skills.filter((skill) => {
@@ -250,6 +270,7 @@ function App() {
 
   useEffect(() => {
     setToolbarMessage('');
+    setIsSecretDiceDialogOpen(false);
   }, [gameSystem]);
 
   function updateBasic(key: keyof BasicInfo, value: string) {
@@ -549,16 +570,44 @@ function App() {
       return;
     }
 
-    const payload = buildCharacterClipboardPayload({
-      name: sheet.basic.name,
-      stats: sheet.stats,
-      sanity,
-      skills: sheet.skills,
-      weapons: sheet.weapons,
-    });
+    const payload = buildCharacterClipboardPayload(characterClipboardSource);
     const text = serializeCharacterClipboardPayload(payload);
 
     await writeClipboardText(text);
+    setToolbarMessage('');
+  }
+
+  function openSecretDiceDialog() {
+    setSecretDiceSelection(secretDiceOptions.map((option) => option.id));
+    setIsSecretDiceDialogOpen(true);
+    setToolbarMessage('');
+  }
+
+  function selectAllSecretDice() {
+    setSecretDiceSelection(secretDiceOptions.map((option) => option.id));
+  }
+
+  function clearSecretDiceSelection() {
+    setSecretDiceSelection([]);
+  }
+
+  function toggleSecretDiceOption(id: string) {
+    setSecretDiceSelection((current) =>
+      current.includes(id)
+        ? current.filter((selectedId) => selectedId !== id)
+        : [...current, id],
+    );
+  }
+
+  async function copySecretDiceToClipboard(templateKind: SecretDiceTemplateKind) {
+    const text = serializeSecretDiceImport(
+      characterClipboardSource,
+      secretDiceSelection,
+      templateKind,
+    );
+
+    await writeClipboardText(text);
+    setIsSecretDiceDialogOpen(false);
     setToolbarMessage('');
   }
 
@@ -706,6 +755,17 @@ function App() {
               <Clipboard size={18} />
               <span>팔레트 복사</span>
             </button>
+            {gameSystem === 'coc7' && (
+              <button
+                type="button"
+                className="icon-button"
+                onClick={openSecretDiceDialog}
+                title="비밀 주사위를 복사"
+              >
+                <Dice6 size={18} />
+                <span>비밀 주사위 복사</span>
+              </button>
+            )}
             {/* 저장됨 버튼은 기능치 확정 전까지 숨김. */}
             <button type="button" className="icon-button danger" onClick={resetSheet} title="초기화">
               <RotateCcw size={18} />
@@ -717,6 +777,20 @@ function App() {
             </p>
           )}
         </header>
+
+        {isSecretDiceDialogOpen && (
+          <SecretDiceDialog
+            characterName={topbarTitle}
+            options={secretDiceOptions}
+            selectedIds={secretDiceSelection}
+            onToggleOption={toggleSecretDiceOption}
+            onSelectAll={selectAllSecretDice}
+            onClearAll={clearSecretDiceSelection}
+            onCopyNormal={() => void copySecretDiceToClipboard('normal')}
+            onCopyBonus={() => void copySecretDiceToClipboard('bonus')}
+            onClose={() => setIsSecretDiceDialogOpen(false)}
+          />
+        )}
 
         <div className="content-grid">
           {gameSystem === 'insane' ? (
@@ -1243,6 +1317,125 @@ function App() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function SecretDiceDialog({
+  characterName,
+  options,
+  selectedIds,
+  onToggleOption,
+  onSelectAll,
+  onClearAll,
+  onCopyNormal,
+  onCopyBonus,
+  onClose,
+}: {
+  characterName: string;
+  options: SecretDiceRollOption[];
+  selectedIds: string[];
+  onToggleOption: (id: string) => void;
+  onSelectAll: () => void;
+  onClearAll: () => void;
+  onCopyNormal: () => void;
+  onCopyBonus: () => void;
+  onClose: () => void;
+}) {
+  const selectedIdSet = new Set(selectedIds);
+  const statOptions = options.filter((option) => option.kind === 'stat');
+  const skillOptions = options.filter((option) => option.kind === 'skill');
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section
+        className="secret-dice-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="secret-dice-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="secret-dice-header">
+          <div>
+            <h2 id="secret-dice-title">비밀 주사위 복사</h2>
+            <strong className="secret-dice-character">복사 대상 {characterName}</strong>
+            <p>
+              {selectedIds.length}/{options.length} 선택
+            </p>
+          </div>
+          <button type="button" className="icon-only" onClick={onClose} title="닫기">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div className="secret-dice-controls">
+          <button type="button" onClick={onSelectAll}>
+            <Check size={16} />
+            전체 선택
+          </button>
+          <button type="button" onClick={onClearAll}>
+            <X size={16} />
+            전체 해제
+          </button>
+        </div>
+
+        <div className="secret-dice-option-groups">
+          <SecretDiceOptionGroup
+            title="특성치"
+            options={statOptions}
+            selectedIdSet={selectedIdSet}
+            onToggleOption={onToggleOption}
+          />
+          <SecretDiceOptionGroup
+            title="기능치"
+            options={skillOptions}
+            selectedIdSet={selectedIdSet}
+            onToggleOption={onToggleOption}
+          />
+        </div>
+
+        <footer className="secret-dice-actions">
+          <button type="button" onClick={onCopyNormal}>
+            <Dice6 size={16} />
+            일반 주사위 복사
+          </button>
+          <button type="button" onClick={onCopyBonus}>
+            <Dice6 size={16} />
+            보정 주사위 복사
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function SecretDiceOptionGroup({
+  title,
+  options,
+  selectedIdSet,
+  onToggleOption,
+}: {
+  title: string;
+  options: SecretDiceRollOption[];
+  selectedIdSet: Set<string>;
+  onToggleOption: (id: string) => void;
+}) {
+  return (
+    <div className="secret-dice-group">
+      <h3>{title}</h3>
+      <div className="secret-dice-list">
+        {options.map((option) => (
+          <label className="secret-dice-option" key={option.id}>
+            <input
+              type="checkbox"
+              checked={selectedIdSet.has(option.id)}
+              onChange={() => onToggleOption(option.id)}
+            />
+            <strong>{option.label}</strong>
+            <span>{option.value}</span>
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
