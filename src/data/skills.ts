@@ -1,4 +1,4 @@
-import type { InvestigatorStats, SheetSkill } from '../lib/character';
+import type { CocEdition, InvestigatorStats, SheetSkill } from '../lib/character';
 
 interface SkillTemplate {
   id: string;
@@ -9,7 +9,7 @@ interface SkillTemplate {
   isGroup?: boolean;
 }
 
-const templates: SkillTemplate[] = [
+const coc7Templates: SkillTemplate[] = [
   { id: 'appraise', name: '감정', base: 5, category: '탐사' },
   { id: 'fighting-brawl', name: '근접전(격투)', base: 25, category: '전투' },
   { id: 'archaeology', name: '고고학', base: 1, category: '지식' },
@@ -60,7 +60,68 @@ const templates: SkillTemplate[] = [
   { id: 'dodge', name: '회피', base: 0, category: '전투', dynamicBase: 'dexHalf' },
 ];
 
-export const skillCategories = ['전체', ...Array.from(new Set(templates.map((skill) => skill.category)))];
+const coc6Templates: SkillTemplate[] = [
+  { id: 'appraise', name: '감정', base: 5, category: '탐사' },
+  { id: 'fighting-brawl', name: '근접전(격투)', base: 50, category: '전투' },
+  { id: 'grapple', name: '그래플', base: 25, category: '전투' },
+  { id: 'kick', name: '발차기', base: 25, category: '전투' },
+  { id: 'head-butt', name: '박치기', base: 10, category: '전투' },
+  { id: 'martial-arts', name: '무술', base: 1, category: '전투' },
+  { id: 'archaeology', name: '고고학', base: 1, category: '지식' },
+  { id: 'science', name: '과학', base: 1, category: '지식', isGroup: true },
+  { id: 'spot-hidden', name: '관찰력', base: 25, category: '탐사' },
+  { id: 'mechanical-repair', name: '기계수리', base: 20, category: '기술' },
+  { id: 'jump', name: '도약', base: 25, category: '운동' },
+  { id: 'listen', name: '듣기', base: 25, category: '탐사' },
+  { id: 'climb', name: '오르기', base: 40, category: '운동' },
+  { id: 'fast-talk', name: '말재주', base: 5, category: '사회' },
+  { id: 'bargain', name: '흥정', base: 5, category: '사회' },
+  { id: 'law', name: '법률', base: 5, category: '지식' },
+  { id: 'disguise', name: '변장', base: 1, category: '기술' },
+  { id: 'hide', name: '숨기기', base: 10, category: '탐사' },
+  { id: 'conceal', name: '감추기', base: 15, category: '탐사' },
+  { id: 'sneak', name: '은신', base: 10, category: '탐사' },
+  { id: 'firearms-handgun', name: '사격(권총)', base: 20, category: '전투' },
+  { id: 'firearms-rifle', name: '사격(라이플/산탄총)', base: 25, category: '전투' },
+  { id: 'persuade', name: '설득', base: 15, category: '사회' },
+  { id: 'swim', name: '수영', base: 25, category: '운동' },
+  { id: 'ride', name: '승마', base: 5, category: '지식' },
+  { id: 'credit-rating', name: '재력', base: 15, category: '사회' },
+  { id: 'language-own', name: '언어(모국어)', base: 0, category: '지식', dynamicBase: 'edu5' },
+  { id: 'language-foreign', name: '언어(외국어)', base: 1, category: '지식', isGroup: true },
+  { id: 'history', name: '역사', base: 20, category: '지식' },
+  { id: 'locksmith', name: '열쇠공', base: 1, category: '기술' },
+  { id: 'art-craft', name: '예술/공예', base: 5, category: '사회', isGroup: true },
+  { id: 'occult', name: '오컬트', base: 5, category: '지식' },
+  { id: 'first-aid', name: '응급처치', base: 30, category: '기술' },
+  { id: 'electronics', name: '전자기기', base: 1, category: '기술' },
+  { id: 'medicine', name: '의학', base: 5, category: '기술' },
+  { id: 'anthropology', name: '인류학', base: 1, category: '지식' },
+  { id: 'drive-auto', name: '자동차 운전', base: 20, category: '운동' },
+  { id: 'natural-world', name: '자연사', base: 10, category: '지식' },
+  { id: 'library-use', name: '자료조사', base: 25, category: '탐사' },
+  { id: 'elec-repair', name: '전기수리', base: 10, category: '기술' },
+  { id: 'psychoanalysis', name: '정신분석', base: 1, category: '기술' },
+  { id: 'psychology', name: '심리학', base: 5, category: '사회' },
+  { id: 'pharmacy', name: '약학', base: 1, category: '기술' },
+  { id: 'photography', name: '사진술', base: 10, category: '기술' },
+  { id: 'track', name: '추적', base: 10, category: '탐사' },
+  { id: 'computer-use', name: '컴퓨터 사용', base: 1, category: '지식' },
+  { id: 'cthulhu-mythos', name: '크툴루 신화', base: 0, category: '지식' },
+  { id: 'throw', name: '투척', base: 25, category: '운동' },
+  { id: 'navigate', name: '항법', base: 10, category: '운동' },
+  { id: 'accounting', name: '회계', base: 10, category: '지식' },
+  { id: 'dodge', name: '회피', base: 0, category: '전투', dynamicBase: 'dex2' },
+];
+
+function getSkillTemplates(edition: CocEdition): SkillTemplate[] {
+  return edition === 'coc6' ? coc6Templates : coc7Templates;
+}
+
+export const skillCategories = [
+  '전체',
+  ...Array.from(new Set([...coc7Templates, ...coc6Templates].map((skill) => skill.category))),
+];
 
 const koreanNameCollator = new Intl.Collator('ko-KR', {
   numeric: true,
@@ -99,9 +160,12 @@ export function sortSkillsByKoreanName(skills: SheetSkill[]): SheetSkill[] {
   return [...sortedSkills, ...orphanChildSkills, ...customSkills];
 }
 
-export function createInitialSkills(_stats: InvestigatorStats): SheetSkill[] {
+export function createInitialSkills(
+  _stats: InvestigatorStats,
+  edition: CocEdition = 'coc7',
+): SheetSkill[] {
   return sortSkillsByKoreanName(
-    templates.map((skill) => ({
+    getSkillTemplates(edition).map((skill) => ({
       ...skill,
       occupation: 0,
       interest: 0,
@@ -115,8 +179,9 @@ export function createInitialSkills(_stats: InvestigatorStats): SheetSkill[] {
 export function normalizeStoredSkills(
   storedSkills: SheetSkill[],
   stats: InvestigatorStats,
+  edition: CocEdition = 'coc7',
 ): SheetSkill[] {
-  const currentSkills = createInitialSkills(stats);
+  const currentSkills = createInitialSkills(stats, edition);
   const currentSkillIds = new Set(currentSkills.map((skill) => skill.id));
   const storedSkillById = new Map(storedSkills.map((skill) => [skill.id, skill]));
   const normalizedBuiltInSkills = currentSkills.map((currentSkill) => {

@@ -327,6 +327,17 @@ select:disabled {
   overflow: hidden;
 }
 
+.coc-export-dialog {
+  display: grid;
+  width: min(520px, 100%);
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 8px;
+  background: #24272e;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
 .secret-dice-header,
 .secret-dice-actions {
   display: flex;
@@ -445,6 +456,27 @@ select:disabled {
   justify-content: flex-end;
   border-top: 1px solid rgb(255 255 255 / 0.1);
   background: rgb(255 255 255 / 0.03);
+}
+
+.coc-export-options {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+
+.coc-export-options button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  justify-content: start;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 13px;
+  text-align: left;
+}
+
+.coc-export-options span {
+  overflow-wrap: anywhere;
 }
 
 .content-grid {
@@ -1564,6 +1596,10 @@ td {
 
   .secret-dice-dialog {
     max-height: calc(100vh - 24px);
+  }
+
+  .coc-export-dialog {
+    width: 100%;
   }
 
   .secret-dice-option-groups {

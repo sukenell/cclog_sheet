@@ -319,7 +319,9 @@ describe('secret dice Roll20 import export', () => {
       'bonus',
     );
 
-    expect(text).toContain('/w gm &{template:coc}{{name=@{dex_txt}}}');
+    expect(text).toContain(
+      '/w gm &{template:coc}{{name=@{dex_txt}}}{{success=[[@{dex}]]}}{{hard=[[floor(@{dex}/2)]]}}{{extreme=[[floor(@{dex}/5)]]}}{{roll1=[[1d100]]}}{{roll2=[[1d100]]}} {{roll3=[[1d100]]}}',
+    );
     expect(text).not.toContain('template:coc-1');
     expect(text).toContain('"character": "새로운 탐사자"');
   });

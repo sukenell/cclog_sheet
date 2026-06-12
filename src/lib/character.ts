@@ -8,7 +8,8 @@ export type StatKey =
   | 'INT'
   | 'EDU';
 
-export type DynamicBase = 'dexHalf' | 'edu' | 'none';
+export type CocEdition = 'coc7' | 'coc6';
+export type DynamicBase = 'dexHalf' | 'dex2' | 'edu' | 'edu5' | 'none';
 
 export interface InvestigatorStats extends Record<StatKey, number> {
   luck: number;
@@ -132,15 +133,43 @@ function d6(rng: () => number): number {
   return Math.floor(rng() * 6) + 1;
 }
 
+function roll3d6(rng: () => number): number {
+  return d6(rng) + d6(rng) + d6(rng);
+}
+
 function roll3d6x5(rng: () => number): number {
   return (d6(rng) + d6(rng) + d6(rng)) * 5;
+}
+
+function roll2d6plus6(rng: () => number): number {
+  return d6(rng) + d6(rng) + 6;
 }
 
 function roll2d6plus6x5(rng: () => number): number {
   return (d6(rng) + d6(rng) + 6) * 5;
 }
 
-export function rollInvestigatorStats(rng: () => number = Math.random): InvestigatorStats {
+export function rollInvestigatorStats(
+  editionOrRng: CocEdition | (() => number) = 'coc7',
+  maybeRng: () => number = Math.random,
+): InvestigatorStats {
+  const edition = typeof editionOrRng === 'function' ? 'coc7' : editionOrRng;
+  const rng = typeof editionOrRng === 'function' ? editionOrRng : maybeRng;
+
+  if (edition === 'coc6') {
+    return {
+      STR: roll3d6(rng),
+      CON: roll3d6(rng),
+      POW: roll3d6(rng),
+      DEX: roll3d6(rng),
+      APP: roll3d6(rng),
+      SIZ: roll2d6plus6(rng),
+      INT: roll2d6plus6(rng),
+      EDU: roll2d6plus6(rng),
+      luck: roll3d6(rng),
+    };
+  }
+
   return {
     STR: roll3d6x5(rng),
     CON: roll3d6x5(rng),
@@ -154,7 +183,24 @@ export function rollInvestigatorStats(rng: () => number = Math.random): Investig
   };
 }
 
-export function calculateDerivedStats(stats: InvestigatorStats): DerivedStats {
+export function calculateDerivedStats(
+  stats: InvestigatorStats,
+  edition: CocEdition = 'coc7',
+): DerivedStats {
+  if (edition === 'coc6') {
+    const { damageBonus, build } = calculateCoc6DamageProfile(stats.STR + stats.SIZ);
+
+    return {
+      hp: Math.ceil((stats.CON + stats.SIZ) / 2),
+      mp: positiveNumber(stats.POW),
+      san: clampPercent(stats.POW * 5),
+      luck: clampPercent(stats.luck * 5),
+      damageBonus,
+      build,
+      move: calculateMove(stats),
+    };
+  }
+
   const strengthAndSize = stats.STR + stats.SIZ;
   const { damageBonus, build } = calculateDamageProfile(strengthAndSize);
 
@@ -167,6 +213,17 @@ export function calculateDerivedStats(stats: InvestigatorStats): DerivedStats {
     build,
     move: calculateMove(stats),
   };
+}
+
+function calculateCoc6DamageProfile(total: number): Pick<DerivedStats, 'damageBonus' | 'build'> {
+  if (total <= 12) return { damageBonus: '-1d6', build: 0 };
+  if (total <= 16) return { damageBonus: '-1d4', build: 0 };
+  if (total <= 24) return { damageBonus: '0', build: 0 };
+  if (total <= 32) return { damageBonus: '+1d4', build: 0 };
+  if (total <= 40) return { damageBonus: '+1d6', build: 0 };
+
+  const dice = Math.floor((total - 41) / 16) + 2;
+  return { damageBonus: `+${dice}d6`, build: 0 };
 }
 
 function calculateDamageProfile(total: number): Pick<DerivedStats, 'damageBonus' | 'build'> {
@@ -189,7 +246,9 @@ function calculateMove(stats: InvestigatorStats): number {
 
 export function resolveSkillBase(skill: SheetSkill, stats: InvestigatorStats): number {
   if (skill.dynamicBase === 'dexHalf') return half(stats.DEX);
+  if (skill.dynamicBase === 'dex2') return clampPercent(stats.DEX * 2);
   if (skill.dynamicBase === 'edu') return clampPercent(stats.EDU);
+  if (skill.dynamicBase === 'edu5') return clampPercent(stats.EDU * 5);
   return clampPercent(skill.base);
 }
 
@@ -250,27 +309,30 @@ export function calculateOccupationTotal(
   stats: InvestigatorStats,
   formula: OccupationFormula,
   manualValue = 0,
+  edition: CocEdition = 'coc7',
 ): number {
+  const multiplier = edition === 'coc6' ? 5 : 1;
+
   switch (formula) {
     case 'str2edu2':
-      return stats.STR * 2 + stats.EDU * 2;
+      return (stats.STR * 2 + stats.EDU * 2) * multiplier;
     case 'con2edu2':
-      return stats.CON * 2 + stats.EDU * 2;
+      return (stats.CON * 2 + stats.EDU * 2) * multiplier;
     case 'pow2edu2':
-      return stats.POW * 2 + stats.EDU * 2;
+      return (stats.POW * 2 + stats.EDU * 2) * multiplier;
     case 'dex2edu2':
-      return stats.DEX * 2 + stats.EDU * 2;
+      return (stats.DEX * 2 + stats.EDU * 2) * multiplier;
     case 'app2edu2':
-      return stats.APP * 2 + stats.EDU * 2;
+      return (stats.APP * 2 + stats.EDU * 2) * multiplier;
     case 'siz2edu2':
-      return stats.SIZ * 2 + stats.EDU * 2;
+      return (stats.SIZ * 2 + stats.EDU * 2) * multiplier;
     case 'int2edu2':
-      return stats.INT * 2 + stats.EDU * 2;
+      return (stats.INT * 2 + stats.EDU * 2) * multiplier;
     case 'manual':
       return Math.max(0, Math.round(manualValue));
     case 'edu4':
     default:
-      return stats.EDU * 4;
+      return stats.EDU * 4 * multiplier;
   }
 }
 
@@ -279,9 +341,10 @@ export function calculateSkillBudget(
   stats: InvestigatorStats,
   formula: OccupationFormula,
   manualOccupationTotal = 0,
+  edition: CocEdition = 'coc7',
 ): SkillBudget {
-  const occupationTotal = calculateOccupationTotal(stats, formula, manualOccupationTotal);
-  const interestTotal = stats.INT * 2;
+  const occupationTotal = calculateOccupationTotal(stats, formula, manualOccupationTotal, edition);
+  const interestTotal = stats.INT * 2 * (edition === 'coc6' ? 5 : 1);
   const pointSpendingSkills = skills.filter((skill) => !isSkillGroup(skill));
   const occupationSpent = pointSpendingSkills.reduce((sum, skill) => sum + positiveNumber(skill.occupation), 0);
   const interestSpent = pointSpendingSkills.reduce((sum, skill) => sum + positiveNumber(skill.interest), 0);
@@ -303,6 +366,30 @@ export function normalizeStats(stats: InvestigatorStats): InvestigatorStats {
       number
     >),
     luck: clampPercent(stats.luck),
+  };
+}
+
+export function convertInvestigatorStats(
+  stats: InvestigatorStats,
+  fromEdition: CocEdition,
+  toEdition: CocEdition,
+): InvestigatorStats {
+  if (fromEdition === toEdition) return normalizeStats(stats);
+
+  const convertValue =
+    fromEdition === 'coc7' && toEdition === 'coc6'
+      ? (value: number) => Math.round(clampPercent(value) / 5)
+      : (value: number) => clampPercent(value * 5);
+
+  return {
+    ...statKeys.reduce(
+      (result, key) => ({
+        ...result,
+        [key]: convertValue(stats[key]),
+      }),
+      {} as Record<StatKey, number>,
+    ),
+    luck: convertValue(stats.luck),
   };
 }
 

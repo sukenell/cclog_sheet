@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultStats, type SheetSkill } from '../lib/character';
+import { defaultStats, resolveSkillBase, type InvestigatorStats, type SheetSkill } from '../lib/character';
 import {
   createInitialSkills,
   createSpecialtySkill,
@@ -163,6 +163,35 @@ describe('createInitialSkills', () => {
     expect(skills.find((skill) => skill.name === '동물 다루기')).toMatchObject({ category: '지식' });
     expect(skills.find((skill) => skill.name === '독순술')).toMatchObject({ category: '지식' });
     expect(skills.find((skill) => skill.name === '승마')).toMatchObject({ category: '지식' });
+  });
+
+  it('uses 6th edition base values and legacy skills when requested', () => {
+    const coc6Stats: InvestigatorStats = {
+      STR: 10,
+      CON: 12,
+      POW: 11,
+      DEX: 9,
+      APP: 13,
+      SIZ: 14,
+      INT: 15,
+      EDU: 16,
+      luck: 11,
+    };
+    const skills = createInitialSkills(coc6Stats, 'coc6');
+
+    expect(skills.find((skill) => skill.id === 'climb')).toMatchObject({
+      name: '오르기',
+      base: 40,
+    });
+    expect(skills.find((skill) => skill.id === 'history')).toMatchObject({
+      name: '역사',
+      base: 20,
+    });
+    expect(skills.map((skill) => skill.name)).toEqual(
+      expect.arrayContaining(['숨기기', '은신', '흥정', '심리학', '사진술']),
+    );
+    expect(resolveSkillBase(skills.find((skill) => skill.id === 'dodge')!, coc6Stats)).toBe(18);
+    expect(resolveSkillBase(skills.find((skill) => skill.id === 'language-own')!, coc6Stats)).toBe(80);
   });
 });
 

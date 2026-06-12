@@ -2,6 +2,7 @@ import { sortSkillsByKoreanName } from '../data/skills';
 import {
   calculateDerivedStats,
   calculateSkillTotal,
+  type CocEdition,
   isSkillGroup,
   statLabels,
   type InvestigatorStats,
@@ -21,6 +22,7 @@ export interface CharacterClipboardSource {
   sanity: SanityInfo;
   skills: SheetSkill[];
   weapons: ClipboardWeapon[];
+  edition?: CocEdition;
 }
 
 export interface CharacterClipboardPayload {
@@ -202,7 +204,8 @@ const roll20SkillAttributeNames: Record<string, string> = {
 export function buildCharacterClipboardPayload(
   source: CharacterClipboardSource,
 ): CharacterClipboardPayload {
-  const derived = calculateDerivedStats(source.stats);
+  const edition = source.edition ?? 'coc7';
+  const derived = calculateDerivedStats(source.stats, edition);
   const name = source.name.trim() || '새로운 탐사자';
 
   return {
@@ -214,14 +217,14 @@ export function buildCharacterClipboardPayload(
         { label: 'HP', value: derived.hp, max: derived.hp },
         { label: 'MP', value: derived.mp, max: derived.mp },
         { label: '이성', value: source.sanity.current, max: derived.san },
-        { label: '행운', value: source.stats.luck, max: source.stats.luck },
+        { label: '행운', value: derived.luck, max: derived.luck },
       ],
       params: [
         { label: '이동력', value: String(derived.move) },
         { label: '체구', value: String(derived.build) },
         { label: 'DB', value: derived.damageBonus },
       ],
-      commands: buildCharacterCommands(source),
+      commands: buildCharacterCommands(source, edition),
     },
   };
 }
@@ -287,14 +290,13 @@ function buildSecretDiceImportPayload(
   templateKind: SecretDiceTemplateKind,
 ): SecretDiceImportPayload {
   const selectedIds = new Set(selectedOptionIds);
-  const template = templateKind === 'bonus' ? 'coc' : 'coc-1';
   const usedAbilityNames = new Set<string>();
   const selectedOptions = buildSecretDiceRollOptions(source).filter((option) =>
     selectedIds.has(option.id),
   );
   const abilities = selectedOptions.reduce<Record<string, string>>((acc, option) => {
     acc[createUniqueSecretDiceAbilityName(option.label, usedAbilityNames)] =
-      buildSecretDiceMacro(option, template);
+      buildSecretDiceMacro(option, templateKind);
     return acc;
   }, {});
 
@@ -325,16 +327,27 @@ function buildSecretDiceAttributes(
   return attributes;
 }
 
-function buildSecretDiceMacro(option: SecretDiceRollOption, template: string): string {
+function buildSecretDiceMacro(
+  option: SecretDiceRollOption,
+  templateKind: SecretDiceTemplateKind,
+): string {
   const attributeReference = `@{${option.attributeName}}`;
+  const isBonusDice = templateKind === 'bonus';
+  const template = isBonusDice ? 'coc' : 'coc-1';
+  const hardExpression = isBonusDice
+    ? `floor(${attributeReference}/2)`
+    : `floor(${attributeReference} /2)`;
+  const rolls = isBonusDice
+    ? ['{{roll1=[[1d100]]}}', '{{roll2=[[1d100]]}}', ' {{roll3=[[1d100]]}}']
+    : ['{{roll1=[[1d100]]}}'];
 
   return [
     `/w gm &{template:${template}}`,
     `{{name=${option.templateName}}}`,
     `{{success=[[${attributeReference}]]}}`,
-    `{{hard=[[floor(${attributeReference} /2)]]}}`,
+    `{{hard=[[${hardExpression}]]}}`,
     `{{extreme=[[floor(${attributeReference}/5)]]}}`,
-    '{{roll1=[[1d100]]}}',
+    ...rolls,
   ].join('');
 }
 
@@ -375,8 +388,8 @@ function createUniqueAttributeName(baseName: string, usedNames: Set<string>): st
   return name;
 }
 
-function buildCharacterCommands(source: CharacterClipboardSource): string {
-  const statCommands = buildStatCommands(source.stats);
+function buildCharacterCommands(source: CharacterClipboardSource, edition: CocEdition): string {
+  const statCommands = buildStatCommands(source.stats, edition);
   const skillCommands = buildSkillCommands(source.skills, source.stats);
   const weaponCommands = buildWeaponCommands(source.weapons);
 
@@ -394,10 +407,13 @@ function buildCharacterCommands(source: CharacterClipboardSource): string {
   ].join('\n');
 }
 
-function buildStatCommands(stats: InvestigatorStats): string[] {
+function buildStatCommands(stats: InvestigatorStats, edition: CocEdition): string[] {
   return Object.keys(statLabels)
     .filter((key): key is StatKey => key in stats)
-    .map((key) => `CC<=${stats[key]}  ${statCommandLabels[key] ?? statLabels[key]}`);
+    .map((key) => {
+      const value = edition === 'coc6' ? clampRollValue(stats[key] * 5) : stats[key];
+      return `CC<=${value}  ${statCommandLabels[key] ?? statLabels[key]}`;
+    });
 }
 
 function buildSkillCommands(skills: SheetSkill[], stats: InvestigatorStats): string[] {

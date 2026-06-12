@@ -55,6 +55,8 @@ import {
   calculateSkillBudget,
   calculateSkillTotal,
   clampPercent,
+  CocEdition,
+  convertInvestigatorStats,
   defaultStats,
   fifth,
   fourFifths,
@@ -72,6 +74,7 @@ import {
   statLabels,
 } from './lib/character';
 import { rollInvestigatorStats } from './lib/character';
+import { createCocExportArchive, type CocExportMode } from './lib/cocExport';
 import {
   createInitialSectionOpenState,
   SheetSectionId,
@@ -143,13 +146,24 @@ type SheetStateArchive = Partial<Omit<SheetState, 'weapons' | 'armors' | 'spells
 };
 
 type CombatTab = 'weapons' | 'armor' | 'spells';
-type GameSystem = 'coc7' | 'insane';
+type GameSystem = 'coc7' | 'coc6' | 'insan';
 
 const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
 const insaneStorageKey = 'cclog-sheet:insane:v1';
 const colorPickerFallback = '#68c870';
 const statOrder: StatKey[] = ['STR', 'DEX', 'POW', 'CON', 'APP', 'EDU', 'SIZ', 'INT'];
+const coc6OccupationFormulaLabels: Record<OccupationFormula, string> = {
+  edu4: 'EDU x 20',
+  str2edu2: 'STR x 10 + EDU x 10',
+  con2edu2: 'CON x 10 + EDU x 10',
+  pow2edu2: 'POW x 10 + EDU x 10',
+  dex2edu2: 'DEX x 10 + EDU x 10',
+  app2edu2: 'APP x 10 + EDU x 10',
+  siz2edu2: 'SIZ x 10 + EDU x 10',
+  int2edu2: 'INT x 10 + EDU x 10',
+  manual: '직접 입력',
+};
 
 const backstoryFields = [
   ['appearance', '외형'],
@@ -169,13 +183,16 @@ function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function createInitialSheet(): SheetState {
-  const stats = defaultStats;
+function createInitialSheet(edition: CocEdition = 'coc7'): SheetState {
+  const stats =
+    edition === 'coc6' ? convertInvestigatorStats(defaultStats, 'coc7', 'coc6') : defaultStats;
+  const derived = calculateDerivedStats(stats, edition);
+
   return {
     basic: createDefaultBasicInfo(),
     stats,
-    sanity: createDefaultSanityInfo(stats.POW),
-    skills: createInitialSkills(stats),
+    sanity: createDefaultSanityInfo(derived.san),
+    skills: createInitialSkills(stats, edition),
     weapons: createDefaultWeapons(),
     armors: [],
     spells: [],
@@ -207,13 +224,18 @@ function App() {
   const [combatTab, setCombatTab] = useState<CombatTab>('weapons');
   const [weaponCategory, setWeaponCategory] = useState<WeaponCategory>('melee');
   const [isSecretDiceDialogOpen, setIsSecretDiceDialogOpen] = useState(false);
+  const [isCocExportDialogOpen, setIsCocExportDialogOpen] = useState(false);
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  const derived = useMemo(() => calculateDerivedStats(sheet.stats), [sheet.stats]);
+  const cocEdition = getCocEdition(gameSystem);
+  const derived = useMemo(
+    () => calculateDerivedStats(sheet.stats, cocEdition),
+    [cocEdition, sheet.stats],
+  );
   const sanity = useMemo(
-    () => normalizeSanityInfo(sheet.sanity, sheet.stats.POW),
-    [sheet.sanity, sheet.stats.POW],
+    () => normalizeSanityInfo(sheet.sanity, derived.san),
+    [derived.san, sheet.sanity],
   );
   const budget = useMemo(
     () =>
@@ -222,8 +244,9 @@ function App() {
         sheet.stats,
         sheet.occupationFormula,
         sheet.manualOccupationTotal,
+        cocEdition,
       ),
-    [sheet.manualOccupationTotal, sheet.occupationFormula, sheet.skills, sheet.stats],
+    [cocEdition, sheet.manualOccupationTotal, sheet.occupationFormula, sheet.skills, sheet.stats],
   );
   const checkedSkillCount = sheet.skills.filter(
     (skill) => skill.checked && !isSkillGroup(skill),
@@ -235,8 +258,9 @@ function App() {
       sanity,
       skills: sheet.skills,
       weapons: sheet.weapons,
+      edition: cocEdition,
     }),
-    [sanity, sheet.basic.name, sheet.skills, sheet.stats, sheet.weapons],
+    [cocEdition, sanity, sheet.basic.name, sheet.skills, sheet.stats, sheet.weapons],
   );
   const secretDiceOptions = useMemo(
     () => buildSecretDiceRollOptions(characterClipboardSource),
@@ -271,6 +295,7 @@ function App() {
   useEffect(() => {
     setToolbarMessage('');
     setIsSecretDiceDialogOpen(false);
+    setIsCocExportDialogOpen(false);
   }, [gameSystem]);
 
   function updateBasic(key: keyof BasicInfo, value: string) {
@@ -285,15 +310,28 @@ function App() {
     setIsSidebarOpen((current) => toggleSidebarOpen(current));
   }
 
+  function handleGameSystemChange(nextSystem: GameSystem) {
+    if (nextSystem === gameSystem) return;
+
+    if (isCocGameSystem(gameSystem) && isCocGameSystem(nextSystem)) {
+      setSheet((current) => convertCocSheetEdition(current, gameSystem, nextSystem));
+      setSkillCategory('전체');
+    }
+
+    setGameSystem(nextSystem);
+  }
+
   function updateStat(key: StatKey | 'luck', value: string) {
     setSheet((current) => {
       const stats = normalizeStats({
         ...current.stats,
         [key]: Number(value),
       } as InvestigatorStats);
+      const previousSanStart = calculateDerivedStats(current.stats, cocEdition).san;
+      const nextSanStart = calculateDerivedStats(stats, cocEdition).san;
       const sanity =
         key === 'POW'
-          ? syncSanityWithPow(current.sanity, current.stats.POW, stats.POW)
+          ? syncSanityWithPow(current.sanity, previousSanStart, nextSanStart)
           : current.sanity;
 
       return { ...current, stats, sanity };
@@ -383,11 +421,16 @@ function App() {
   }
 
   function rollStats() {
-    const stats = rollInvestigatorStats();
+    const stats = rollInvestigatorStats(cocEdition);
     setSheet((current) => ({
       ...current,
       stats,
-      sanity: syncSanityWithPow(current.sanity, current.stats.POW, stats.POW),
+      sanity: syncSanityWithPow(
+        current.sanity,
+        calculateDerivedStats(current.stats, cocEdition).san,
+        calculateDerivedStats(stats, cocEdition).san,
+      ),
+      skills: normalizeStoredSkills(current.skills, stats, cocEdition),
     }));
   }
 
@@ -517,11 +560,24 @@ function App() {
   }
 
   function exportJson() {
-    const activeSheet = gameSystem === 'insane' ? insaneSheet : sheet;
-    const activeName =
-      gameSystem === 'insane'
-        ? insaneSheet.basic.name || 'insane-character'
-        : sheet.basic.name || 'investigator';
+    if (gameSystem !== 'insan') {
+      setIsCocExportDialogOpen(true);
+      return;
+    }
+
+    downloadJsonArchive(
+      { ...insaneSheet, gameSystem: 'insan' },
+      insaneSheet.basic.name || 'insan-character',
+    );
+  }
+
+  function exportCocJson(mode: CocExportMode) {
+    const archive = createCocExportArchive(sheet, mode, cocEdition);
+    downloadJsonArchive(archive, sheet.basic.name || 'investigator');
+    setIsCocExportDialogOpen(false);
+  }
+
+  function downloadJsonArchive(activeSheet: unknown, activeName: string) {
     const blob = new Blob([serializeSheetArchive(activeSheet)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -544,10 +600,11 @@ function App() {
 
         setGameSystem(targetSystem);
 
-        if (targetSystem === 'insane') {
+        if (targetSystem === 'insan') {
           setInsaneSheet(normalizeInsaneSheet(parsedArchive));
         } else {
-          setSheet(normalizeSheetState(parsedArchive as SheetStateArchive));
+          const targetEdition = targetSystem === 'coc6' ? 'coc6' : 'coc7';
+          setSheet(normalizeSheetState(parsedArchive as SheetStateArchive, targetEdition));
         }
       } catch {
         setGrowthMessage('가져오기 파일을 읽지 못했습니다.');
@@ -558,7 +615,7 @@ function App() {
   }
 
   async function copyCharacterToClipboard() {
-    if (gameSystem === 'insane') {
+    if (gameSystem === 'insan') {
       const copyError = getInsanePaletteCopyError(insaneSheet);
       if (copyError) {
         setToolbarMessage(copyError);
@@ -578,6 +635,8 @@ function App() {
   }
 
   function openSecretDiceDialog() {
+    if (gameSystem !== 'coc7') return;
+
     setSecretDiceSelection(secretDiceOptions.map((option) => option.id));
     setIsSecretDiceDialogOpen(true);
     setToolbarMessage('');
@@ -612,48 +671,52 @@ function App() {
   }
 
   function resetSheet() {
-    if (gameSystem === 'insane') {
+    if (gameSystem === 'insan') {
       setInsaneSheet(createInitialInsaneSheet());
       setToolbarMessage('');
       return;
     }
 
-    setSheet(createInitialSheet());
+    setSheet(createInitialSheet(cocEdition));
     setGrowthMessage('');
     setGrowthResults([]);
     setToolbarMessage('');
   }
 
   const topbarTitle =
-    gameSystem === 'insane'
+    gameSystem === 'insan'
       ? insaneSheet.basic.name || '새로운 봉마인'
       : sheet.basic.name || '새로운 탐사자';
   const insaneTopbarSanity = calculateInsaneEffectiveSanity(insaneSheet);
   const topbarSubtitle =
-    gameSystem === 'insane'
+    gameSystem === 'insan'
       ? `${insaneSheet.basic.occupation || '직업 미정'} · 생명력 ${insaneSheet.vitals.life.current}/${insaneSheet.vitals.life.max} · 이성치 ${insaneTopbarSanity}/${insaneSheet.vitals.sanity.max}`
-      : `${sheet.basic.occupation || '직업 미정'} · SAN ${sanity.current}`;
+      : `${sheet.basic.occupation || '직업 미정'} · ${gameSystem === 'coc6' ? 'COC 6판' : 'COC 7판'} · SAN ${sanity.current}`;
+  const brandMark = gameSystem === 'insan' ? 'IN' : gameSystem === 'coc6' ? 'C6' : 'CC';
+  const activeOccupationFormulaLabels =
+    cocEdition === 'coc6' ? coc6OccupationFormulaLabels : occupationFormulaLabels;
 
   return (
     <div className={`app-shell ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
       <aside className="sidebar" aria-label="시트 섹션" aria-hidden={!isSidebarOpen}>
         <div className="brand">
-          <div className="brand-mark">{gameSystem === 'insane' ? 'IN' : 'CC'}</div>
+          <div className="brand-mark">{brandMark}</div>
           <div className="brand-copy">
             <strong>CCLog Sheet</strong>
             <select
               className="game-system-select"
               aria-label="룰 선택"
               value={gameSystem}
-              onChange={(event) => setGameSystem(event.target.value as GameSystem)}
+              onChange={(event) => handleGameSystemChange(event.target.value as GameSystem)}
             >
               <option value="coc7">COC 7판</option>
-              <option value="insane">InSane</option>
+              <option value="coc6">COC 6판</option>
+              <option value="insan">InSane</option>
             </select>
           </div>
         </div>
         <nav>
-          {gameSystem === 'insane' ? (
+          {gameSystem === 'insan' ? (
             <>
               <a href="#basic">
                 <UserRound size={17} /> 봉마인정보
@@ -792,8 +855,19 @@ function App() {
           />
         )}
 
+        {isCocExportDialogOpen && (
+          <CocExportDialog
+            characterName={topbarTitle}
+            editionLabel={gameSystem === 'coc6' ? 'COC 6판' : 'COC 7판'}
+            onExportFull={() => exportCocJson('full')}
+            onExportInvestedSkills={() => exportCocJson('investedSkills')}
+            onExportCharacteristicsOnly={() => exportCocJson('characteristicsOnly')}
+            onClose={() => setIsCocExportDialogOpen(false)}
+          />
+        )}
+
         <div className="content-grid">
-          {gameSystem === 'insane' ? (
+          {gameSystem === 'insan' ? (
             <InsaneSheetView
               sheet={insaneSheet}
               setSheet={setInsaneSheet}
@@ -837,7 +911,7 @@ function App() {
             sectionId="stats"
             className="stat-panel"
             icon={<Sparkles size={20} />}
-            title="특성치"
+            title={gameSystem === 'coc6' ? '특성치 (COC 6판)' : '특성치'}
             action={<button type="button" onClick={rollStats}><Dice6 size={16} /> 랜덤 다이스</button>}
             isOpen={sectionOpen.stats}
             onToggle={toggleSection}
@@ -849,6 +923,7 @@ function App() {
                   code={key}
                   label={statLabels[key]}
                   value={sheet.stats[key]}
+                  edition={cocEdition}
                   onChange={(value) => updateStat(key, value)}
                 />
               ))}
@@ -856,20 +931,32 @@ function App() {
                 code="LUK"
                 label="행운"
                 value={sheet.stats.luck}
+                edition={cocEdition}
                 onChange={(value) => updateStat('luck', value)}
               />
             </div>
             <div className="derived-grid">
               <Metric label="체력" value={derived.hp} />
               <Metric label="마력" value={derived.mp} />
+              {cocEdition === 'coc6' && <Metric label="행운" value={derived.luck} />}
               <Metric label="피해 보너스" value={derived.damageBonus} />
-              <PairedMetric
-                label="이동력 · 체구"
-                primaryLabel="이동력"
-                primaryValue={derived.move}
-                secondaryLabel="체구"
-                secondaryValue={derived.build}
-              />
+              {cocEdition === 'coc6' ? (
+                <PairedMetric
+                  label="아이디어 · 지식"
+                  primaryLabel="아이디어"
+                  primaryValue={clampPercent(sheet.stats.INT * 5)}
+                  secondaryLabel="지식"
+                  secondaryValue={clampPercent(sheet.stats.EDU * 5)}
+                />
+              ) : (
+                <PairedMetric
+                  label="이동력 · 체구"
+                  primaryLabel="이동력"
+                  primaryValue={derived.move}
+                  secondaryLabel="체구"
+                  secondaryValue={derived.build}
+                />
+              )}
             </div>
             <SanityMetric
               current={sanity.current}
@@ -892,7 +979,9 @@ function App() {
             onToggle={toggleSection}
           >
             <div className="budget-row">
-              <div className="interest-point-note">관심 포인트 INT×2</div>
+              <div className="interest-point-note">
+                관심 포인트 {cocEdition === 'coc6' ? 'INT×10' : 'INT×2'}
+              </div>
               <label>
                 직업 포인트
                 <select
@@ -904,7 +993,7 @@ function App() {
                     }))
                   }
                 >
-                  {Object.entries(occupationFormulaLabels).map(([value, label]) => (
+                  {Object.entries(activeOccupationFormulaLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
@@ -1321,6 +1410,61 @@ function App() {
   );
 }
 
+function CocExportDialog({
+  characterName,
+  editionLabel,
+  onExportFull,
+  onExportInvestedSkills,
+  onExportCharacteristicsOnly,
+  onClose,
+}: {
+  characterName: string;
+  editionLabel: string;
+  onExportFull: () => void;
+  onExportInvestedSkills: () => void;
+  onExportCharacteristicsOnly: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section
+        className="coc-export-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coc-export-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="secret-dice-header">
+          <div>
+            <h2 id="coc-export-title">COC 내보내기</h2>
+            <strong className="secret-dice-character">
+              {editionLabel} · {characterName}
+            </strong>
+          </div>
+          <button type="button" className="icon-only" onClick={onClose} title="닫기">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div className="coc-export-options">
+          <button type="button" onClick={onExportFull}>
+            <Download size={17} />
+            <span>전체 내보내기</span>
+          </button>
+          <button type="button" onClick={onExportInvestedSkills}>
+            <BookOpen size={17} />
+            <span>투자 기능치만 내보내기</span>
+          </button>
+          <button type="button" onClick={onExportCharacteristicsOnly}>
+            <Sparkles size={17} />
+            <span>특성치만 내보내기</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function SecretDiceDialog({
   characterName,
   options,
@@ -1442,10 +1586,11 @@ function SecretDiceOptionGroup({
 
 function loadSheet(): SheetState {
   try {
+    const edition = getCocEdition(loadGameSystem());
     const saved = window.localStorage.getItem(storageKey);
-    if (!saved) return createInitialSheet();
+    if (!saved) return createInitialSheet(edition);
     const parsed = JSON.parse(saved) as SheetStateArchive;
-    return normalizeSheetState(parsed);
+    return normalizeSheetState(parsed, edition);
   } catch {
     return createInitialSheet();
   }
@@ -1453,7 +1598,11 @@ function loadSheet(): SheetState {
 
 function loadGameSystem(): GameSystem {
   try {
-    return window.localStorage.getItem(systemStorageKey) === 'insane' ? 'insane' : 'coc7';
+    const saved = window.localStorage.getItem(systemStorageKey);
+
+    if (saved === 'insan' || saved === 'insane') return 'insan';
+    if (saved === 'coc6') return 'coc6';
+    return 'coc7';
   } catch {
     return 'coc7';
   }
@@ -1469,23 +1618,52 @@ function loadInsaneSheet(): InsaneSheetState {
   }
 }
 
-function normalizeSheetState(parsed: SheetStateArchive): SheetState {
-  const fallback = createInitialSheet();
+function normalizeSheetState(
+  parsed: SheetStateArchive,
+  edition: CocEdition = 'coc7',
+): SheetState {
+  const fallback = createInitialSheet(edition);
   const { armor: legacyArmor, ...sheetValues } = parsed;
   const stats = normalizeStats({ ...fallback.stats, ...parsed.stats } as InvestigatorStats);
+  const derived = calculateDerivedStats(stats, edition);
 
   return {
     ...fallback,
     ...sheetValues,
     basic: normalizeBasicInfo(parsed.basic),
     stats,
-    sanity: normalizeSanityInfo(parsed.sanity, stats.POW),
-    skills: parsed.skills?.length ? normalizeStoredSkills(parsed.skills, stats) : fallback.skills,
+    sanity: normalizeSanityInfo(parsed.sanity, derived.san),
+    skills: parsed.skills?.length ? normalizeStoredSkills(parsed.skills, stats, edition) : fallback.skills,
     backstory: { ...fallback.backstory, ...parsed.backstory },
     weapons: normalizeWeapons(parsed.weapons),
     armors: normalizeArmors(parsed.armors ?? legacyArmor),
     spells: normalizeSpells(parsed.spells),
     scenarios: normalizeScenarios(parsed.scenarios),
+  };
+}
+
+function getCocEdition(gameSystem: GameSystem): CocEdition {
+  return gameSystem === 'coc6' ? 'coc6' : 'coc7';
+}
+
+function isCocGameSystem(gameSystem: GameSystem): gameSystem is CocEdition {
+  return gameSystem === 'coc7' || gameSystem === 'coc6';
+}
+
+function convertCocSheetEdition(
+  sheet: SheetState,
+  fromEdition: CocEdition,
+  toEdition: CocEdition,
+): SheetState {
+  const stats = convertInvestigatorStats(sheet.stats, fromEdition, toEdition);
+  const previousSanStart = calculateDerivedStats(sheet.stats, fromEdition).san;
+  const nextSanStart = calculateDerivedStats(stats, toEdition).san;
+
+  return {
+    ...sheet,
+    stats,
+    sanity: syncSanityWithPow(sheet.sanity, previousSanStart, nextSanStart),
+    skills: normalizeStoredSkills(sheet.skills, stats, toEdition),
   };
 }
 
@@ -2415,12 +2593,14 @@ function StatInput({
   code,
   label,
   value,
+  edition,
   onChange,
   readOnly,
 }: {
   code: string;
   label: string;
   value: number;
+  edition: CocEdition;
   onChange: (value: string) => void;
   readOnly?: boolean;
 }) {
@@ -2429,9 +2609,7 @@ function StatInput({
       <span>{code}</span>
       <strong>{label}</strong>
       <input type="number" min={0} max={99} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
-      <small>
-        {half(value)} / {fifth(value)}
-      </small>
+      <small>{edition === 'coc6' ? `판정 ${clampPercent(value * 5)}` : `${half(value)} / ${fifth(value)}`}</small>
     </label>
   );
 }

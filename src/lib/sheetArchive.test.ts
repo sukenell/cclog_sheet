@@ -25,12 +25,23 @@ describe('sheet JSON archive', () => {
 
     expect(
       detectSheetArchiveSystem({
+        gameSystem: 'coc6',
+        basic: { name: '6판 탐사자' },
+        stats: { STR: 12, DEX: 9 },
+        skills: [],
+      }),
+    ).toBe('coc6');
+
+    expect(
+      detectSheetArchiveSystem({
         basic: { name: '봉마인' },
         vitals: { life: { current: 6 }, sanity: { current: 6 } },
         curiosity: '1. 폭력',
         skills: { 소각: { checked: true, target: 5 } },
       }),
-    ).toBe('insane');
+    ).toBe('insan');
+
+    expect(detectSheetArchiveSystem({ gameSystem: 'insane' })).toBe('insan');
 
     expect(detectSheetArchiveSystem({ basic: { name: '애매한 데이터' } })).toBe('unknown');
   });

@@ -4,6 +4,7 @@ import {
   calculateDerivedStats,
   calculateSkillBudget,
   calculateSkillTotal,
+  convertInvestigatorStats,
   fourFifths,
   rollInvestigatorStats,
   type InvestigatorStats,
@@ -33,6 +34,64 @@ describe('calculateDerivedStats', () => {
       build: 0,
       move: 8,
     });
+  });
+
+  it('derives 6th edition resource values from raw characteristics', () => {
+    const coc6Stats: InvestigatorStats = {
+      STR: 14,
+      CON: 12,
+      POW: 11,
+      DEX: 9,
+      APP: 13,
+      SIZ: 16,
+      INT: 15,
+      EDU: 14,
+      luck: 12,
+    };
+
+    expect(calculateDerivedStats(coc6Stats, 'coc6')).toEqual({
+      hp: 14,
+      mp: 11,
+      san: 55,
+      luck: 60,
+      damageBonus: '+1d4',
+      build: 0,
+      move: 7,
+    });
+  });
+});
+
+describe('convertInvestigatorStats', () => {
+  it('converts the current sheet characteristics in place between 7th and 6th edition scales', () => {
+    expect(convertInvestigatorStats(baseStats, 'coc7', 'coc6')).toEqual({
+      STR: 10,
+      CON: 12,
+      POW: 11,
+      DEX: 14,
+      APP: 8,
+      SIZ: 13,
+      INT: 16,
+      EDU: 15,
+      luck: 9,
+    });
+
+    expect(
+      convertInvestigatorStats(
+        {
+          STR: 10,
+          CON: 12,
+          POW: 11,
+          DEX: 14,
+          APP: 8,
+          SIZ: 13,
+          INT: 16,
+          EDU: 15,
+          luck: 9,
+        },
+        'coc6',
+        'coc7',
+      ),
+    ).toEqual(baseStats);
   });
 });
 
@@ -75,6 +134,13 @@ describe('calculateSkillBudget', () => {
       interestTotal: 160,
       interestSpent: 35,
       interestRemaining: 125,
+    });
+  });
+
+  it('uses 6th edition occupation and interest point multipliers for raw characteristics', () => {
+    expect(calculateSkillBudget([], { ...baseStats, INT: 15, EDU: 14 }, 'edu4', 0, 'coc6')).toMatchObject({
+      occupationTotal: 280,
+      interestTotal: 150,
     });
   });
 
@@ -228,6 +294,22 @@ describe('rollInvestigatorStats', () => {
       INT: 40,
       EDU: 40,
       luck: 15,
+    });
+  });
+
+  it('rolls deterministic 6th edition raw characteristics from an injected RNG', () => {
+    const rolls = rollInvestigatorStats('coc6', () => 0);
+
+    expect(rolls).toEqual({
+      STR: 3,
+      CON: 3,
+      POW: 3,
+      DEX: 3,
+      APP: 3,
+      SIZ: 8,
+      INT: 8,
+      EDU: 8,
+      luck: 3,
     });
   });
 });

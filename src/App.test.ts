@@ -30,18 +30,34 @@ describe('topbar archive controls', () => {
     expect(importBlock).toContain('const importedSystem = detectSheetArchiveSystem(parsedArchive);');
     expect(importBlock).toContain("const targetSystem = importedSystem === 'unknown' ? gameSystem : importedSystem;");
     expect(importBlock).toContain('setGameSystem(targetSystem);');
-    expect(importBlock).toContain("if (targetSystem === 'insane')");
-    expect(importBlock).not.toContain("if (gameSystem === 'insane')");
+    expect(importBlock).toContain("if (targetSystem === 'insan')");
+    expect(importBlock).not.toContain("if (gameSystem === 'insan')");
   });
 
-  it('offers COC 7th edition and InSane as selectable sheet systems', () => {
+  it('offers COC 7th edition, COC 6th edition, and InSane as selectable sheet systems', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 
     expect(source).toContain('className="game-system-select"');
+    expect(source).toContain("type GameSystem = 'coc7' | 'coc6' | 'insan';");
     expect(source).toContain('COC 7판');
+    expect(source).toContain('COC 6판');
     expect(source).toContain('InSane');
+    expect(source).toContain('value="insan"');
+    expect(source).toContain('handleGameSystemChange');
+    expect(source).toContain('convertCocSheetEdition');
     expect(source).toContain('<strong>CCLog Sheet</strong>\n            <select');
     expect(source).not.toContain('<span>{systemLabel}</span>');
+  });
+
+  it('opens a COC export option dialog from the toolbar', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('isCocExportDialogOpen');
+    expect(source).toContain('CocExportDialog');
+    expect(source).toContain('전체 내보내기');
+    expect(source).toContain('투자 기능치만 내보내기');
+    expect(source).toContain('특성치만 내보내기');
+    expect(source).toContain('createCocExportArchive');
   });
 
   it('orders CoC characteristic cards by the requested sheet layout', () => {
@@ -123,7 +139,7 @@ describe('topbar archive controls', () => {
 
   it('uses a shared session card section for CoC and InSane', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
-    const cocNavStart = source.indexOf("{gameSystem === 'insane' ?");
+    const cocNavStart = source.indexOf("{gameSystem === 'insan' ?");
     const cocBranchStart = source.indexOf(') : (', cocNavStart);
     const cocBranchEnd = source.indexOf('</nav>', cocBranchStart);
     const cocNav = source.slice(cocBranchStart, cocBranchEnd);
