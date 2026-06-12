@@ -49,6 +49,42 @@ describe('topbar archive controls', () => {
     expect(source).not.toContain('<span>{systemLabel}</span>');
   });
 
+  it('prompts for an InSane ability password when choosing InSane from the system dropdown', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('insaneAbilityPresetPassword');
+    expect(source).toContain('VITE_INSANE_ABILITY_PASSWORD');
+    expect(source).toContain('isInsaneAbilityPasswordDialogOpen');
+    expect(source).toContain('InsaneAbilityPasswordDialog');
+    expect(source).toContain('confirmInsaneAbilityPassword');
+    expect(source).toContain('cancelInsaneAbilityPassword');
+    expect(source).toContain('type="password"');
+    expect(source).toContain('어빌리티 자동 불러오기 활성화(취소를 누르면 비활성화 됩니다.)');
+    expect(source).toContain(
+      '룰북 구매확인 비밀번호(*룰북 92p 주석에 적힌 숫자와 + 블데 룰북 40P 플레이어 1명 기준 리미트 숫자를 합산한 문장을 적어주세요)',
+    );
+    expect(source).toContain('취소');
+    expect(source).toContain('확인');
+    expect(source).not.toContain('프리셋 불러오기 비밀번호');
+  });
+
+  it('locks InSane ability preset imports until the password is accepted', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const updateAbilityStart = source.indexOf('function updateAbilityName');
+    const updateAbilityEnd = source.indexOf('function updateAbility(', updateAbilityStart);
+    const updateAbilityBlock = source.slice(updateAbilityStart, updateAbilityEnd);
+    const abilitySectionStart = source.indexOf('title="어빌리티"');
+    const relationshipStart = source.indexOf('title="인물란"', abilitySectionStart);
+    const abilityBlock = source.slice(abilitySectionStart, relationshipStart);
+
+    expect(source).toContain('isInsaneAbilityPresetUnlocked');
+    expect(source).toContain('isAbilityPresetImportLocked');
+    expect(source).toContain('abilityPresetImportLocked={isAbilityPresetImportLocked}');
+    expect(updateAbilityBlock).toContain('!abilityPresetImportLocked');
+    expect(abilityBlock).toContain('{!abilityPresetImportLocked && (');
+    expect(abilityBlock).toContain("list={abilityPresetImportLocked ? undefined : 'insane-ability-presets'}");
+  });
+
   it('opens a COC export option dialog from the toolbar', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 
@@ -110,10 +146,27 @@ describe('topbar archive controls', () => {
     expect(source).toContain('className="stat-panel insane-basic-details-panel"');
     expect(basicBlock).toContain('TextField label="나이"');
     expect(basicBlock).toContain('TextField label="플레이어 이름"');
-    expect(basicBlock).toContain('TextField label="이미지 주소"');
+    expect(basicBlock).toContain('<span>이미지 주소</span>');
     expect(basicBlock).not.toContain('NumberField label="공적점"');
     expect(basicBlock).not.toContain('TextField label="연령"');
     expect(basic2Block).toContain('NumberField label="공적점"');
+  });
+
+  it('lets InSane sheets keep additional portrait URLs beside the main portrait', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    const basicStart = source.indexOf('title="봉마인 정보"');
+    const basic2Start = source.indexOf('title="봉마인 정보2"');
+    const basicBlock = source.slice(basicStart, basic2Start);
+
+    expect(source).toContain('addInsanePortrait');
+    expect(source).toContain('updateInsaneExtraImageUrl');
+    expect(source).toContain('removeInsanePortrait');
+    expect(basicBlock).toContain('+add');
+    expect(basicBlock).toContain('insane-portrait-strip');
+    expect(basicBlock).toContain('sheet.basic.extraImageUrls.map');
+    expect(styles).toContain('.insane-portrait-strip');
+    expect(styles).toContain('overflow-x: auto;');
   });
 
   it('marks the selected curiosity column with a gap class', () => {
@@ -185,7 +238,7 @@ describe('topbar archive controls', () => {
 
     expect(source).toContain('renameInsaneAbilityWithPreset');
     expect(abilityBlock).toContain('id="insane-ability-presets"');
-    expect(abilityBlock).toContain('list="insane-ability-presets"');
+    expect(abilityBlock).toContain("list={abilityPresetImportLocked ? undefined : 'insane-ability-presets'}");
     expect(abilityBlock).toContain('className="scenario-list"');
     expect(abilityBlock).toContain('className="scenario-item insane-ability-item"');
     expect(abilityBlock).toContain("ability.name.trim() === '기본공격'");

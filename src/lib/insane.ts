@@ -70,6 +70,7 @@ export interface InsaneSheetState {
     merit: number;
     color: string;
     imageUrl: string;
+    extraImageUrls: string[];
   };
   vitals: {
     life: {
@@ -161,6 +162,7 @@ export function createInitialInsaneSheet(): InsaneSheetState {
       merit: 0,
       color: '',
       imageUrl: '',
+      extraImageUrls: [],
     },
     vitals: {
       life: {
@@ -235,6 +237,7 @@ export function normalizeInsaneSheet(value: unknown): InsaneSheetState {
       merit: nonNegativeNumber(basic.merit, fallback.basic.merit),
       color: stringValue(basic.color),
       imageUrl: stringValue(basic.imageUrl),
+      extraImageUrls: stringArrayValue(basic.extraImageUrls),
     },
     vitals: {
       life: {
@@ -493,6 +496,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function nonNegativeNumber(value: unknown, fallback: number): number {

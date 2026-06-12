@@ -10,6 +10,7 @@ import {
   insaneSkillCategories,
   insanePaletteRequiredMessage,
   isDefaultInsaneAbility,
+  normalizeInsaneSheet,
   rollInsaneRandomSetup,
 } from './insane';
 
@@ -39,6 +40,7 @@ describe('inSANe sheet model', () => {
     });
     expect(sheet.vitals.sanity).toEqual({ current: 6, max: 6, confused: false });
     expect(sheet.basic.player).toBe('');
+    expect(sheet.basic.extraImageUrls).toEqual([]);
     expect(sheet.items.painkiller).toBe(0);
     expect(sheet.items.weapon).toBe(0);
     expect(sheet.items.charm).toBe(0);
@@ -48,6 +50,27 @@ describe('inSANe sheet model', () => {
       '기폭장치',
     ]);
     expect(sheet.abilities.map((ability) => ability.name)).toEqual(['기본공격', '전장이동']);
+  });
+
+  it('keeps additional portrait image URLs in normalized InSane sheets', () => {
+    const sheet = normalizeInsaneSheet({
+      basic: {
+        imageUrl: 'https://example.com/main.png',
+        extraImageUrls: [
+          'https://example.com/one.png',
+          '',
+          'https://example.com/two.png',
+          10,
+        ],
+      },
+    });
+
+    expect(sheet.basic.imageUrl).toBe('https://example.com/main.png');
+    expect(sheet.basic.extraImageUrls).toEqual([
+      'https://example.com/one.png',
+      '',
+      'https://example.com/two.png',
+    ]);
   });
 
   it('requires checked specialties, curiosity, and fear before copying the palette', () => {

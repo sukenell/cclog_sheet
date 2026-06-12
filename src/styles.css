@@ -338,6 +338,17 @@ select:disabled {
   overflow: hidden;
 }
 
+.insane-password-dialog {
+  display: grid;
+  width: min(430px, 100%);
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 8px;
+  background: #24272e;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
 .secret-dice-header,
 .secret-dice-actions {
   display: flex;
@@ -479,6 +490,23 @@ select:disabled {
   overflow-wrap: anywhere;
 }
 
+.insane-password-body {
+  padding: 16px;
+}
+
+.insane-password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.insane-password-actions button {
+  min-width: 76px;
+}
+
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(330px, 0.9fr);
@@ -609,6 +637,81 @@ select:disabled {
   right: 10px;
   bottom: 10px;
   background: rgb(21 25 32 / 0.88);
+}
+
+.insane-basic-panel .basic-grid {
+  grid-template-columns: minmax(260px, 0.72fr) 1fr;
+}
+
+.insane-portrait-box {
+  display: grid;
+  min-width: 0;
+}
+
+.insane-portrait-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(82px, calc((100% - 16px) / 3));
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.insane-portrait-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 236px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 7px;
+  background: #11151b;
+}
+
+.insane-portrait-frame img {
+  width: 100%;
+  height: 100%;
+  min-height: 236px;
+  object-fit: cover;
+  display: block;
+}
+
+.insane-portrait-frame figcaption {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgb(8 11 16 / 0.76);
+  color: #e8efe9;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-label-row button {
+  min-height: 28px;
+  height: 28px;
+  padding-inline: 10px;
+}
+
+.insane-portrait-url-field {
+  align-content: start;
+}
+
+.insane-extra-portrait-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 7px;
 }
 
 .field-grid {

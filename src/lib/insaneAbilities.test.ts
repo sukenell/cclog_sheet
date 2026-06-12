@@ -98,6 +98,21 @@ describe('InSane ability presets', () => {
     ).toBe('소각');
   });
 
+  it('renames without applying preset details while preset import is locked', () => {
+    const ability = {
+      id: 'ability-test',
+      name: '',
+      type: '서포트',
+      specialty: '',
+      effect: '',
+    };
+
+    expect(renameInsaneAbilityWithPreset(ability, '저격', false)).toEqual({
+      ...ability,
+      name: '저격',
+    });
+  });
+
   it('feeds completed preset data into palette copy output', () => {
     const sheet = createInitialInsaneSheet();
     sheet.curiosity = '1. 폭력';

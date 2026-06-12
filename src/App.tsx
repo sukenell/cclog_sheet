@@ -152,6 +152,9 @@ const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
 const insaneStorageKey = 'cclog-sheet:insane:v1';
 const colorPickerFallback = '#68c870';
+const insaneAbilityPresetPassword =
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    ?.VITE_INSANE_ABILITY_PASSWORD ?? '').trim();
 const statOrder: StatKey[] = ['STR', 'DEX', 'POW', 'CON', 'APP', 'EDU', 'SIZ', 'INT'];
 const coc6OccupationFormulaLabels: Record<OccupationFormula, string> = {
   edu4: 'EDU x 20',
@@ -225,10 +228,15 @@ function App() {
   const [weaponCategory, setWeaponCategory] = useState<WeaponCategory>('melee');
   const [isSecretDiceDialogOpen, setIsSecretDiceDialogOpen] = useState(false);
   const [isCocExportDialogOpen, setIsCocExportDialogOpen] = useState(false);
+  const [isInsaneAbilityPasswordDialogOpen, setIsInsaneAbilityPasswordDialogOpen] =
+    useState(false);
+  const [insaneAbilityPasswordDraft, setInsaneAbilityPasswordDraft] = useState('');
+  const [isInsaneAbilityPresetUnlocked, setIsInsaneAbilityPresetUnlocked] = useState(false);
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const cocEdition = getCocEdition(gameSystem);
+  const isAbilityPresetImportLocked = gameSystem === 'insan' && !isInsaneAbilityPresetUnlocked;
   const derived = useMemo(
     () => calculateDerivedStats(sheet.stats, cocEdition),
     [cocEdition, sheet.stats],
@@ -296,6 +304,7 @@ function App() {
     setToolbarMessage('');
     setIsSecretDiceDialogOpen(false);
     setIsCocExportDialogOpen(false);
+    setIsInsaneAbilityPasswordDialogOpen(false);
   }, [gameSystem]);
 
   function updateBasic(key: keyof BasicInfo, value: string) {
@@ -313,12 +322,41 @@ function App() {
   function handleGameSystemChange(nextSystem: GameSystem) {
     if (nextSystem === gameSystem) return;
 
+    if (nextSystem === 'insan' && !isInsaneAbilityPresetUnlocked) {
+      setInsaneAbilityPasswordDraft('');
+      setIsInsaneAbilityPasswordDialogOpen(true);
+      return;
+    }
+
     if (isCocGameSystem(gameSystem) && isCocGameSystem(nextSystem)) {
       setSheet((current) => convertCocSheetEdition(current, gameSystem, nextSystem));
       setSkillCategory('전체');
     }
 
+    if (nextSystem !== 'insan') {
+      setIsInsaneAbilityPresetUnlocked(false);
+    }
+
     setGameSystem(nextSystem);
+  }
+
+  function openInsaneSheetWithAbilityLock(isUnlocked: boolean) {
+    setIsInsaneAbilityPresetUnlocked(isUnlocked);
+    setInsaneAbilityPasswordDraft('');
+    setIsInsaneAbilityPasswordDialogOpen(false);
+    setGameSystem('insan');
+  }
+
+  function confirmInsaneAbilityPassword() {
+    const isPasswordAccepted =
+      Boolean(insaneAbilityPresetPassword) &&
+      insaneAbilityPasswordDraft.trim() === insaneAbilityPresetPassword;
+
+    openInsaneSheetWithAbilityLock(isPasswordAccepted);
+  }
+
+  function cancelInsaneAbilityPassword() {
+    openInsaneSheetWithAbilityLock(false);
   }
 
   function updateStat(key: StatKey | 'luck', value: string) {
@@ -866,6 +904,15 @@ function App() {
           />
         )}
 
+        {isInsaneAbilityPasswordDialogOpen && (
+          <InsaneAbilityPasswordDialog
+            value={insaneAbilityPasswordDraft}
+            onChange={setInsaneAbilityPasswordDraft}
+            onConfirm={confirmInsaneAbilityPassword}
+            onCancel={cancelInsaneAbilityPassword}
+          />
+        )}
+
         <div className="content-grid">
           {gameSystem === 'insan' ? (
             <InsaneSheetView
@@ -873,6 +920,7 @@ function App() {
               setSheet={setInsaneSheet}
               sectionOpen={sectionOpen}
               onToggle={toggleSection}
+              abilityPresetImportLocked={isAbilityPresetImportLocked}
             />
           ) : (
             <>
@@ -1553,6 +1601,67 @@ function SecretDiceDialog({
   );
 }
 
+function InsaneAbilityPasswordDialog({
+  value,
+  onChange,
+  onConfirm,
+  onCancel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <form
+        className="insane-password-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="insane-password-title"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="secret-dice-header">
+          <div>
+            <h2 id="insane-password-title">InSane 어빌리티 잠금</h2>
+            <strong className="secret-dice-character">
+              어빌리티 자동 불러오기 활성화(취소를 누르면 비활성화 됩니다.)
+            </strong>
+          </div>
+          <button type="button" className="icon-only" onClick={onCancel} title="닫기">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div className="insane-password-body">
+          <label className="field">
+            <span>룰북 구매확인 비밀번호(*룰북 92p 주석에 적힌 숫자와 + 블데 룰북 40P 플레이어 1명 기준 리미트 숫자를 합산한 문장을 적어주세요)</span>
+            <input
+              type="password"
+              value={value}
+              autoFocus
+              onChange={(event) => onChange(event.target.value)}
+            />
+          </label>
+        </div>
+
+        <footer className="insane-password-actions">
+          <button type="button" onClick={onCancel}>
+            취소
+          </button>
+          <button type="submit">
+            확인
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
 function SecretDiceOptionGroup({
   title,
   options,
@@ -1700,11 +1809,13 @@ function InsaneSheetView({
   setSheet,
   sectionOpen,
   onToggle,
+  abilityPresetImportLocked,
 }: {
   sheet: InsaneSheetState;
   setSheet: React.Dispatch<React.SetStateAction<InsaneSheetState>>;
   sectionOpen: ReturnType<typeof createInitialSectionOpenState>;
   onToggle: (sectionId: SheetSectionId) => void;
+  abilityPresetImportLocked: boolean;
 }) {
   function updateBasic(key: keyof InsaneSheetState['basic'], value: string | number) {
     setSheet((current) => ({
@@ -1712,6 +1823,38 @@ function InsaneSheetView({
       basic: {
         ...current.basic,
         [key]: typeof value === 'number' ? positiveNumber(value) : value,
+      },
+    }));
+  }
+
+  function addInsanePortrait() {
+    setSheet((current) => ({
+      ...current,
+      basic: {
+        ...current.basic,
+        extraImageUrls: [...current.basic.extraImageUrls, ''],
+      },
+    }));
+  }
+
+  function updateInsaneExtraImageUrl(index: number, value: string) {
+    setSheet((current) => ({
+      ...current,
+      basic: {
+        ...current.basic,
+        extraImageUrls: current.basic.extraImageUrls.map((imageUrl, imageIndex) =>
+          imageIndex === index ? value : imageUrl,
+        ),
+      },
+    }));
+  }
+
+  function removeInsanePortrait(index: number) {
+    setSheet((current) => ({
+      ...current,
+      basic: {
+        ...current.basic,
+        extraImageUrls: current.basic.extraImageUrls.filter((_, imageIndex) => imageIndex !== index),
       },
     }));
   }
@@ -1888,7 +2031,7 @@ function InsaneSheetView({
       abilities: current.abilities.map((ability) => {
         if (ability.id !== id) return ability;
 
-        return renameInsaneAbilityWithPreset(ability, value);
+        return renameInsaneAbilityWithPreset(ability, value, !abilityPresetImportLocked);
       }),
     }));
   }
@@ -1944,6 +2087,18 @@ function InsaneSheetView({
 
   const sanityPenalty = calculateInsaneSanityPenalty(sheet);
   const effectiveSanity = calculateInsaneEffectiveSanity(sheet);
+  const insanePortraitItems = [
+    ...(sheet.basic.imageUrl.trim()
+      ? [{ imageUrl: sheet.basic.imageUrl.trim(), label: '대표', alt: '봉마인 대표 이미지' }]
+      : []),
+    ...sheet.basic.extraImageUrls
+      .map((imageUrl, index) => ({
+        imageUrl: imageUrl.trim(),
+        label: `추가 ${index + 1}`,
+        alt: `봉마인 추가 이미지 ${index + 1}`,
+      }))
+      .filter((item) => item.imageUrl),
+  ];
 
   return (
     <>
@@ -1956,9 +2111,16 @@ function InsaneSheetView({
         onToggle={onToggle}
       >
         <div className="basic-grid">
-          <div className="portrait-box">
-            {sheet.basic.imageUrl ? (
-              <img src={sheet.basic.imageUrl} alt="봉마인 이미지" />
+          <div className="portrait-box insane-portrait-box">
+            {insanePortraitItems.length > 0 ? (
+              <div className="insane-portrait-strip" aria-label="등록된 포트레이트">
+                {insanePortraitItems.map((item, index) => (
+                  <figure className="insane-portrait-frame" key={`${item.label}-${item.imageUrl}-${index}`}>
+                    <img src={item.imageUrl} alt={item.alt} />
+                    <figcaption>{item.label}</figcaption>
+                  </figure>
+                ))}
+              </div>
             ) : (
               <div className="portrait-placeholder">
                 <UserRound size={42} />
@@ -1973,7 +2135,32 @@ function InsaneSheetView({
             <TextField label="나이" value={sheet.basic.age} onChange={(value) => updateBasic('age', value)} />
             <TextField label="성별" value={sheet.basic.gender} onChange={(value) => updateBasic('gender', value)} />
             <ColorField label="캐릭터 색상" value={sheet.basic.color} onChange={(value) => updateBasic('color', value)} />
-            <TextField label="이미지 주소" value={sheet.basic.imageUrl} onChange={(value) => updateBasic('imageUrl', value)} wide />
+            <div className="field insane-portrait-url-field wide">
+              <div className="field-label-row">
+                <span>이미지 주소</span>
+                <button type="button" onClick={addInsanePortrait}>
+                  +add
+                </button>
+              </div>
+              <input value={sheet.basic.imageUrl} onChange={(event) => updateBasic('imageUrl', event.target.value)} />
+              {sheet.basic.extraImageUrls.map((imageUrl, index) => (
+                <div className="insane-extra-portrait-row" key={`extra-portrait-${index}`}>
+                  <input
+                    aria-label={`추가 이미지 주소 ${index + 1}`}
+                    value={imageUrl}
+                    onChange={(event) => updateInsaneExtraImageUrl(index, event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="icon-only danger"
+                    onClick={() => removeInsanePortrait(index)}
+                    title="추가 이미지 주소 삭제"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </CollapsibleSection>
@@ -2204,19 +2391,21 @@ function InsaneSheetView({
         onToggle={onToggle}
       >
         <div className="scenario-list">
-          <datalist id="insane-ability-presets">
-            {insaneAbilityPresets.map((preset) => (
-              <option key={`${preset.category}-${preset.name}-${preset.id}`} value={preset.name}>
-                {preset.category} · {preset.type}
-              </option>
-            ))}
-          </datalist>
+          {!abilityPresetImportLocked && (
+            <datalist id="insane-ability-presets">
+              {insaneAbilityPresets.map((preset) => (
+                <option key={`${preset.category}-${preset.name}-${preset.id}`} value={preset.name}>
+                  {preset.category} · {preset.type}
+                </option>
+              ))}
+            </datalist>
+          )}
           {sheet.abilities.map((ability) => (
             <div className="scenario-item insane-ability-item" key={ability.id}>
               <label className="field">
                 <span>어빌리티명</span>
                 <input
-                  list="insane-ability-presets"
+                  list={abilityPresetImportLocked ? undefined : 'insane-ability-presets'}
                   value={ability.name}
                   onChange={(event) => updateAbilityName(ability.id, event.target.value)}
                 />

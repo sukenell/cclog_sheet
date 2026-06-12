@@ -49,6 +49,7 @@ export function applyInsaneAbilityPreset(
 export function renameInsaneAbilityWithPreset(
   ability: InsaneAbility,
   name: string,
+  canApplyPreset = true,
 ): InsaneAbility {
   if (!name.trim()) {
     return {
@@ -61,6 +62,9 @@ export function renameInsaneAbilityWithPreset(
   }
 
   const renamedAbility = { ...ability, name };
+
+  if (!canApplyPreset) return renamedAbility;
+
   const preset = findInsaneAbilityPreset(name);
 
   if (!preset) return renamedAbility;
