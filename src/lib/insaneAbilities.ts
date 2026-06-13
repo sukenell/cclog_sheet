@@ -1,4 +1,3 @@
-import rawAbilityPresets from '../data/insaneAbilities.json';
 import { insaneSpecialtyNames, type InsaneAbility } from './insane';
 
 export interface InsaneAbilityPreset {
@@ -12,8 +11,40 @@ export interface InsaneAbilityPreset {
   note: string;
 }
 
-export const insaneAbilityPresets: InsaneAbilityPreset[] =
-  rawAbilityPresets as InsaneAbilityPreset[];
+interface AbilityPresetResponse {
+  ok: boolean;
+  json: () => Promise<unknown>;
+}
+
+type AbilityPresetFetcher = (path: string) => Promise<AbilityPresetResponse>;
+
+const localAbilityPresetPath = '/src/data/insaneAbilities.json';
+
+export let insaneAbilityPresets: InsaneAbilityPreset[] = [];
+
+export function setInsaneAbilityPresets(presets: unknown): InsaneAbilityPreset[] {
+  insaneAbilityPresets = Array.isArray(presets)
+    ? presets.map(normalizeInsaneAbilityPreset).filter((preset): preset is InsaneAbilityPreset => Boolean(preset))
+    : [];
+
+  return insaneAbilityPresets;
+}
+
+export async function loadInsaneAbilityPresets(
+  fetcher: AbilityPresetFetcher = (path) => fetch(path),
+): Promise<InsaneAbilityPreset[]> {
+  try {
+    const response = await fetcher(localAbilityPresetPath);
+
+    if (!response.ok) {
+      return setInsaneAbilityPresets([]);
+    }
+
+    return setInsaneAbilityPresets(await response.json());
+  } catch {
+    return setInsaneAbilityPresets([]);
+  }
+}
 
 export function findInsaneAbilityPreset(name: string): InsaneAbilityPreset | null {
   const normalizedName = name.trim();
@@ -79,4 +110,27 @@ export function renameInsaneAbilityWithPreset(
   }
 
   return completedAbility;
+}
+
+function normalizeInsaneAbilityPreset(value: unknown): InsaneAbilityPreset | null {
+  if (!isRecord(value)) return null;
+
+  return {
+    id: Number.isFinite(Number(value.id)) ? Number(value.id) : 0,
+    category: stringValue(value.category),
+    name: stringValue(value.name),
+    type: stringValue(value.type),
+    specialty: stringValue(value.specialty),
+    specialtyHint: stringValue(value.specialtyHint),
+    effect: stringValue(value.effect),
+    note: stringValue(value.note),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

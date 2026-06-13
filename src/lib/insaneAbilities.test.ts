@@ -1,27 +1,91 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { buildInsaneChatPalette, createInitialInsaneSheet } from './insane';
 import {
   applyInsaneAbilityPreset,
   findInsaneAbilityPreset,
   insaneAbilityPresets,
+  loadInsaneAbilityPresets,
   renameInsaneAbilityWithPreset,
   resolveInsaneAbilityPresetSpecialty,
+  setInsaneAbilityPresets,
+  type InsaneAbilityPreset,
 } from './insaneAbilities';
 
 describe('InSane ability presets', () => {
-  it('loads the pasted ability source as structured presets', () => {
-    expect(insaneAbilityPresets).toHaveLength(172);
-    expect(insaneAbilityPresets[0]).toMatchObject({
+  const samplePresets: InsaneAbilityPreset[] = [
+    {
+      id: 0,
       category: '기본',
       name: '기본공격',
       type: '공격',
       specialty: '',
       specialtyHint: '아무거나',
-    });
-    expect(insaneAbilityPresets[insaneAbilityPresets.length - 1]).toMatchObject({
-      category: '블랙 데이즈',
-      name: '드론',
-      type: '장비',
+      effect: '목표 1명을 선택해서 명중판정을 한다.',
+      note: '',
+    },
+    {
+      id: 4,
+      category: '범용',
+      name: '저격',
+      type: '공격',
+      specialty: '사격',
+      specialtyHint: '기술 분야에서 아무거나, 사격',
+      effect: '몹 1개체를 목표로 선택하여 명중판정을 한다.',
+      note: '',
+    },
+    {
+      id: 5,
+      category: '범용',
+      name: '무술',
+      type: '공격',
+      specialty: '파괴',
+      specialtyHint: '폭력 분야에서 아무거나, 파괴',
+      effect: '목표 1명을 선택하여 명중판정을 한다.',
+      note: '',
+    },
+    {
+      id: 6,
+      category: '범용',
+      name: '트릭',
+      type: '공격',
+      specialty: '',
+      specialtyHint: '기술분야에서 아무거나',
+      effect: '목표 1명을 선택하여 명중판정을 한다.',
+      note: '',
+    },
+  ];
+
+  beforeEach(() => {
+    setInsaneAbilityPresets(samplePresets);
+  });
+
+  it('loads ability source data through the local runtime preset loader', async () => {
+    const loadedPresets = await loadInsaneAbilityPresets(async (path) => ({
+      ok: path === '/src/data/insaneAbilities.json',
+      json: async () => samplePresets,
+    }));
+
+    expect(loadedPresets).toEqual(samplePresets);
+    expect(insaneAbilityPresets).toEqual(samplePresets);
+  });
+
+  it('clears presets when the local source is unavailable', async () => {
+    const loadedPresets = await loadInsaneAbilityPresets(async () => ({
+      ok: false,
+      json: async () => {
+        throw new Error('not found');
+      },
+    }));
+
+    expect(loadedPresets).toEqual([]);
+    expect(insaneAbilityPresets).toEqual([]);
+  });
+
+  it('keeps pasted ability source data out of static imports', () => {
+    expect(insaneAbilityPresets[0]).toMatchObject({
+      category: '기본',
+      name: '기본공격',
+      type: '공격',
     });
   });
 

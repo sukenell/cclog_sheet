@@ -232,10 +232,13 @@ describe('topbar archive controls', () => {
 
   it('offers immediate InSane ability autocomplete from internal preset data', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const presetSource = readFileSync(resolve(process.cwd(), 'src/lib/insaneAbilities.ts'), 'utf8');
+    const gitignore = readFileSync(resolve(process.cwd(), '.gitignore'), 'utf8');
     const abilityStart = source.indexOf('title="어빌리티"');
     const relationshipStart = source.indexOf('title="인물란"', abilityStart);
     const abilityBlock = source.slice(abilityStart, relationshipStart);
 
+    expect(source).toContain('loadInsaneAbilityPresets');
     expect(source).toContain('renameInsaneAbilityWithPreset');
     expect(abilityBlock).toContain('id="insane-ability-presets"');
     expect(abilityBlock).toContain("list={abilityPresetImportLocked ? undefined : 'insane-ability-presets'}");
@@ -251,6 +254,9 @@ describe('topbar archive controls', () => {
     expect(source).toContain('current.abilities.filter((ability) => ability.id !== id || isDefaultInsaneAbility(ability))');
     expect(source).not.toContain('window.setTimeout');
     expect(source).not.toContain('3000');
+    expect(presetSource).not.toContain("from '../data/insaneAbilities.json'");
+    expect(presetSource).toContain('/src/data/insaneAbilities.json');
+    expect(gitignore).toContain('src/data/insaneAbilities.json');
   });
 
   it('widens InSane ability effects while narrowing the leading controls', () => {

@@ -107,7 +107,11 @@ import {
   type InsaneSession,
   type InsaneSheetState,
 } from './lib/insane';
-import { insaneAbilityPresets, renameInsaneAbilityWithPreset } from './lib/insaneAbilities';
+import {
+  loadInsaneAbilityPresets,
+  renameInsaneAbilityWithPreset,
+  type InsaneAbilityPreset,
+} from './lib/insaneAbilities';
 import {
   BasicInfo,
   createDefaultBasicInfo,
@@ -232,6 +236,7 @@ function App() {
     useState(false);
   const [insaneAbilityPasswordDraft, setInsaneAbilityPasswordDraft] = useState('');
   const [isInsaneAbilityPresetUnlocked, setIsInsaneAbilityPresetUnlocked] = useState(false);
+  const [insaneAbilityPresets, setLoadedInsaneAbilityPresets] = useState<InsaneAbilityPreset[]>([]);
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -299,6 +304,20 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(systemStorageKey, gameSystem);
   }, [gameSystem]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void loadInsaneAbilityPresets().then((presets) => {
+      if (isMounted) {
+        setLoadedInsaneAbilityPresets(presets);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setToolbarMessage('');
@@ -921,6 +940,7 @@ function App() {
               sectionOpen={sectionOpen}
               onToggle={toggleSection}
               abilityPresetImportLocked={isAbilityPresetImportLocked}
+              insaneAbilityPresets={insaneAbilityPresets}
             />
           ) : (
             <>
@@ -1810,12 +1830,14 @@ function InsaneSheetView({
   sectionOpen,
   onToggle,
   abilityPresetImportLocked,
+  insaneAbilityPresets,
 }: {
   sheet: InsaneSheetState;
   setSheet: React.Dispatch<React.SetStateAction<InsaneSheetState>>;
   sectionOpen: ReturnType<typeof createInitialSectionOpenState>;
   onToggle: (sectionId: SheetSectionId) => void;
   abilityPresetImportLocked: boolean;
+  insaneAbilityPresets: InsaneAbilityPreset[];
 }) {
   function updateBasic(key: keyof InsaneSheetState['basic'], value: string | number) {
     setSheet((current) => ({

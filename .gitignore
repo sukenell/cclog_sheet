@@ -3,4 +3,5 @@ dist
 .DS_Store
 .env
 .env.local
+src/data/insaneAbilities.json
 npm-debug.log*
