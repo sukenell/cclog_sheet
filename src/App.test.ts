@@ -45,8 +45,22 @@ describe('topbar archive controls', () => {
     expect(source).toContain('value="insan"');
     expect(source).toContain('handleGameSystemChange');
     expect(source).toContain('convertCocSheetEdition');
-    expect(source).toContain('<strong>CCLog Sheet</strong>\n            <select');
+    expect(source).toContain('<strong>CCLog Sheet</strong>');
+    expect(source).toContain('className="brand-title-row"');
     expect(source).not.toContain('<span>{systemLabel}</span>');
+  });
+
+  it('opens a usage guide page from the CCLog Sheet brand help icon', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('HelpCircle');
+    expect(source).toContain("const [activePage, setActivePage] = useState<AppPage>('sheet');");
+    expect(source).toContain('aria-label="사용방법 보기"');
+    expect(source).toContain('onClick={() => setActivePage(\'usage\')}');
+    expect(source).toContain('title="사용방법"');
+    expect(source).toContain('UsageGuidePage');
+    expect(source).toContain('사용방법');
+    expect(source).toContain('세부 내용은 여기에 작성하세요.');
   });
 
   it('prompts for an InSane ability password when choosing InSane from the system dropdown', () => {

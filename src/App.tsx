@@ -7,6 +7,7 @@ import {
   Download,
   FileInput,
   FileText,
+  HelpCircle,
   Menu,
   Plus,
   RotateCcw,
@@ -151,6 +152,7 @@ type SheetStateArchive = Partial<Omit<SheetState, 'weapons' | 'armors' | 'spells
 
 type CombatTab = 'weapons' | 'armor' | 'spells';
 type GameSystem = 'coc7' | 'coc6' | 'insan';
+type AppPage = 'sheet' | 'usage';
 
 const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
@@ -214,6 +216,7 @@ function createInitialSheet(edition: CocEdition = 'coc7'): SheetState {
 }
 
 function App() {
+  const [activePage, setActivePage] = useState<AppPage>('sheet');
   const [gameSystem, setGameSystem] = useState<GameSystem>(() => loadGameSystem());
   const [sheet, setSheet] = useState<SheetState>(() => loadSheet());
   const [insaneSheet, setInsaneSheet] = useState<InsaneSheetState>(() => loadInsaneSheet());
@@ -749,6 +752,8 @@ function App() {
     gameSystem === 'insan'
       ? `${insaneSheet.basic.occupation || '직업 미정'} · 생명력 ${insaneSheet.vitals.life.current}/${insaneSheet.vitals.life.max} · 이성치 ${insaneTopbarSanity}/${insaneSheet.vitals.sanity.max}`
       : `${sheet.basic.occupation || '직업 미정'} · ${gameSystem === 'coc6' ? 'COC 6판' : 'COC 7판'} · SAN ${sanity.current}`;
+  const pageTitle = activePage === 'usage' ? '사용방법' : topbarTitle;
+  const pageSubtitle = activePage === 'usage' ? 'CCLog Sheet 안내' : topbarSubtitle;
   const brandMark = gameSystem === 'insan' ? 'IN' : gameSystem === 'coc6' ? 'C6' : 'CC';
   const activeOccupationFormulaLabels =
     cocEdition === 'coc6' ? coc6OccupationFormulaLabels : occupationFormulaLabels;
@@ -759,7 +764,18 @@ function App() {
         <div className="brand">
           <div className="brand-mark">{brandMark}</div>
           <div className="brand-copy">
-            <strong>CCLog Sheet</strong>
+            <div className="brand-title-row">
+              <strong>CCLog Sheet</strong>
+              <button
+                type="button"
+                className="brand-help-button"
+                aria-label="사용방법 보기"
+                title="사용방법"
+                onClick={() => setActivePage('usage')}
+              >
+                <HelpCircle size={16} />
+              </button>
+            </div>
             <select
               className="game-system-select"
               aria-label="룰 선택"
@@ -841,11 +857,12 @@ function App() {
               <Menu size={21} />
             </button>
             <div>
-              <h1>{topbarTitle}</h1>
-              <p>{topbarSubtitle}</p>
+              <h1>{pageTitle}</h1>
+              <p>{pageSubtitle}</p>
             </div>
           </div>
-          <div className="toolbar" aria-label="시트 도구">
+          {activePage === 'sheet' ? (
+            <div className="toolbar" aria-label="시트 도구">
             {/*
             <button type="button" className="icon-button" onClick={rollStats} title="초기 특성치 굴림">
               <Dice6 size={18} />
@@ -890,7 +907,15 @@ function App() {
             <button type="button" className="icon-button danger" onClick={resetSheet} title="초기화">
               <RotateCcw size={18} />
             </button>
-          </div>
+            </div>
+          ) : (
+            <div className="toolbar" aria-label="사용방법 도구">
+              <button type="button" className="icon-button" onClick={() => setActivePage('sheet')} title="시트로 돌아가기">
+                <FileText size={18} />
+                <span>시트로 돌아가기</span>
+              </button>
+            </div>
+          )}
           {toolbarMessage && (
             <p className="topbar-message" role="status">
               {toolbarMessage}
@@ -932,6 +957,9 @@ function App() {
           />
         )}
 
+        {activePage === 'usage' ? (
+          <UsageGuidePage />
+        ) : (
         <div className="content-grid">
           {gameSystem === 'insan' ? (
             <InsaneSheetView
@@ -1473,8 +1501,38 @@ function App() {
             </>
           )}
         </div>
+        )}
       </main>
     </div>
+  );
+}
+
+function UsageGuidePage() {
+  const guideSections = [
+    '기본 흐름',
+    '입력 항목',
+    '내보내기 / 가져오기',
+    '자주 묻는 질문',
+  ];
+
+  return (
+    <section className="usage-page" aria-labelledby="usage-guide-title">
+      <div className="usage-page-header">
+        <HelpCircle size={24} aria-hidden="true" />
+        <div>
+          <h2 id="usage-guide-title">사용방법</h2>
+          <p>세부적인 사용방법을 정리하는 공간입니다.</p>
+        </div>
+      </div>
+      <div className="usage-guide-grid">
+        {guideSections.map((title) => (
+          <article className="usage-guide-card" key={title}>
+            <h3>{title}</h3>
+            <p>세부 내용은 여기에 작성하세요.</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
