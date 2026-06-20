@@ -126,6 +126,7 @@ import { detectSheetArchiveSystem, parseSheetArchive, serializeSheetArchive } fr
 import { splitSkillsIntoColumns } from './lib/skillColumns';
 import {
   createAppPath,
+  createSheetSectionPath,
   getAppPageFromPath,
   normalizeAppBasePath,
   type AppPage,
@@ -196,11 +197,20 @@ const helpPath = createAppPath(appBasePath, 'usage');
 const sheetPath = createAppPath(appBasePath, 'sheet');
 const r20JsonExporterUrl = 'https://chromewebstore.google.com/detail/r20-jsonexporter/galgbmfkkpehcijjfcaffifmfjbmlfbo?utm_source=item-share-cb';
 
+type UsageGuideImage = {
+  src: string;
+  alt: string;
+};
+
+type UsageGuideImages =
+  | [UsageGuideImage]
+  | [UsageGuideImage, UsageGuideImage]
+  | [UsageGuideImage, UsageGuideImage, UsageGuideImage];
+
 type UsageGuideSection = {
   title: string;
   description: React.ReactNode;
-  imageSrc: string;
-  imageAlt: string;
+  images: UsageGuideImages;
 };
 
 const usageGuideSections = [
@@ -208,15 +218,23 @@ const usageGuideSections = [
     title: '1. 시트 작성하기',
     description:
       '시트 타입을 고르고, 특성치와 기능치 등의 입력 내용을 손쉽게 계산할 수 있습니다. 현재 지원하는 룰은 COC 7판과 InSane입니다.',
-    imageSrc: `${appBasePath}/usage-guide-basic-flow.svg`,
-    imageAlt: '시트 선택부터 작성 완료까지의 기본 흐름',
+    images: [
+      {
+        src: `${appBasePath}/usage-guide/usage-guide-basic-flow.svg`,
+        alt: '시트 선택부터 작성 완료까지의 기본 흐름',
+      },
+    ],
   },
   {
     title: '2. 팔레트 복사',
     description:
       "상단 '팔레트복사' 버튼을 누르면, 현재 시트의 정보가 클립보드에 복사되며, 코코포리아에서 붙여넣기를 통해 바로 캐릭터 시트로 사용할 수 있습니다.",
-    imageSrc: `${appBasePath}/usage-guide-inputs.svg`,
-    imageAlt: '특성치와 기능치 입력 항목 예시',
+    images: [
+      {
+        src: `${appBasePath}/usage-guide/usage-guide-inputs.svg`,
+        alt: '특성치와 기능치 입력 항목 예시',
+      },
+    ],
   },
   {
     title: '3.비밀 주사위 복사',
@@ -230,15 +248,23 @@ const usageGuideSections = [
         과 연동해서 사용합니다.
       </>
     ),
-    imageSrc: `${appBasePath}/usage-guide-export-import.svg`,
-    imageAlt: '내보내기와 가져오기 버튼 안내',
+    images: [
+      {
+        src: `${appBasePath}/usage-guide/usage-guide-export-import.svg`,
+        alt: '내보내기와 가져오기 버튼 안내',
+      },
+    ],
   },
   {
     title: '4.어빌리티 자동화(인세인)',
     description:
       'InSane 어빌리티는 룰북내 비밀번호를 입력하면, 자동 불러오기 기능이 활성화 됩니다.',
-    imageSrc: `${appBasePath}/usage-guide-faq.svg`,
-    imageAlt: '팔레트 복사와 잠금 안내',
+    images: [
+      {
+        src: `${appBasePath}/usage-guide/usage-guide-faq.svg`,
+        alt: '팔레트 복사와 잠금 안내',
+      },
+    ],
   },
 ] satisfies UsageGuideSection[];
 
@@ -332,8 +358,22 @@ function App() {
       skills: sheet.skills,
       weapons: sheet.weapons,
       edition: cocEdition,
+      iconUrl: sheet.basic.imageUrl,
+      faces: sheet.basic.standingImages.map(({ label, imageUrl }) => ({
+        label,
+        iconUrl: imageUrl,
+      })),
     }),
-    [cocEdition, sanity, sheet.basic.name, sheet.skills, sheet.stats, sheet.weapons],
+    [
+      cocEdition,
+      sanity,
+      sheet.basic.imageUrl,
+      sheet.basic.name,
+      sheet.basic.standingImages,
+      sheet.skills,
+      sheet.stats,
+      sheet.weapons,
+    ],
   );
   const secretDiceOptions = useMemo(
     () => buildSecretDiceRollOptions(characterClipboardSource),
@@ -399,6 +439,44 @@ function App() {
     setSheet((current) => ({ ...current, basic: { ...current.basic, [key]: value } }));
   }
 
+  function addStandingImage() {
+    setSheet((current) => ({
+      ...current,
+      basic: {
+        ...current.basic,
+        standingImages: [...current.basic.standingImages, { label: '', imageUrl: '' }],
+      },
+    }));
+  }
+
+  function updateStandingImage(
+    index: number,
+    key: keyof BasicInfo['standingImages'][number],
+    value: string,
+  ) {
+    setSheet((current) => ({
+      ...current,
+      basic: {
+        ...current.basic,
+        standingImages: current.basic.standingImages.map((image, imageIndex) =>
+          imageIndex === index ? { ...image, [key]: value } : image,
+        ),
+      },
+    }));
+  }
+
+  function removeStandingImage(index: number) {
+    setSheet((current) => ({
+      ...current,
+      basic: {
+        ...current.basic,
+        standingImages: current.basic.standingImages.filter(
+          (_, imageIndex) => imageIndex !== index,
+        ),
+      },
+    }));
+  }
+
   function toggleSection(sectionId: SheetSectionId) {
     setSectionOpen((current) => toggleSectionOpen(current, sectionId));
   }
@@ -407,14 +485,24 @@ function App() {
     setIsSidebarOpen((current) => toggleSidebarOpen(current));
   }
 
-  function navigateToPage(page: AppPage) {
-    const nextPath = createAppPath(appBasePath, page);
+  function navigateToPage(page: AppPage, sectionId?: SheetSectionId) {
+    const nextPath =
+      page === 'sheet' && sectionId
+        ? createSheetSectionPath(appBasePath, sectionId)
+        : createAppPath(appBasePath, page);
+    const currentPath = `${window.location.pathname}${window.location.hash}`;
 
-    if (window.location.pathname !== nextPath) {
+    if (currentPath !== nextPath) {
       window.history.pushState(null, '', nextPath);
     }
 
     setActivePage(page);
+
+    if (page === 'sheet' && sectionId) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ block: 'start' });
+      });
+    }
   }
 
   function showUsagePage(event: MouseEvent<HTMLAnchorElement>) {
@@ -422,8 +510,25 @@ function App() {
     navigateToPage('usage');
   }
 
+  function showSheetSection(event: MouseEvent<HTMLAnchorElement>, sectionId: SheetSectionId) {
+    event.preventDefault();
+    navigateToPage('sheet', sectionId);
+  }
+
   function showSheetPage() {
     navigateToPage('sheet');
+  }
+
+  function renderSidebarLink(sectionId: SheetSectionId, icon: React.ReactNode, label: string) {
+    return (
+      <a
+        href={createSheetSectionPath(appBasePath, sectionId)}
+        onClick={(event) => showSheetSection(event, sectionId)}
+      >
+        {icon}
+        {label}
+      </a>
+    );
   }
 
   function handleGameSystemChange(nextSystem: GameSystem) {
@@ -858,7 +963,7 @@ function App() {
                 title="사용방법"
                 onClick={showUsagePage}
               >
-                <HelpCircle size={16} />
+                <HelpCircle size={20} />
               </a>
             </div>
             <select
@@ -876,54 +981,24 @@ function App() {
         <nav>
           {gameSystem === 'insan' ? (
             <>
-              <a href="#basic">
-                <UserRound size={17} /> 봉마인정보
-              </a>
-              <a href="#insaneBasic2">
-                <Sparkles size={17} /> 봉마인정보2
-              </a>
-              <a href="#stats">
-                <Sparkles size={17} /> 특기
-              </a>
-              <a href="#skills">
-                <BookOpen size={17} /> 아이템
-              </a>
-              <a href="#combat">
-                <Shield size={17} /> 어빌리티
-              </a>
-              <a href="#story">
-                <FileText size={17} /> 인물란
-              </a>
-              <a href="#scenarios">
-                <Upload size={17} /> 세션
-              </a>
-              <a href="#memo">
-                <FileText size={17} /> 메모
-              </a>
+              {renderSidebarLink('basic', <UserRound size={17} />, '봉마인정보')}
+              {renderSidebarLink('insaneBasic2', <Sparkles size={17} />, '봉마인정보2')}
+              {renderSidebarLink('stats', <Sparkles size={17} />, '특기')}
+              {renderSidebarLink('skills', <BookOpen size={17} />, '아이템')}
+              {renderSidebarLink('combat', <Shield size={17} />, '어빌리티')}
+              {renderSidebarLink('story', <FileText size={17} />, '인물란')}
+              {renderSidebarLink('scenarios', <Upload size={17} />, '세션')}
+              {renderSidebarLink('memo', <FileText size={17} />, '메모')}
             </>
           ) : (
             <>
-              <a href="#basic">
-                <UserRound size={17} /> 탐사자정보
-              </a>
-              <a href="#stats">
-                <Sparkles size={17} /> 특성치
-              </a>
-              <a href="#skills">
-                <BookOpen size={17} /> 기능치
-              </a>
-              <a href="#combat">
-                <Shield size={17} /> 전투
-              </a>
-              <a href="#story">
-                <FileText size={17} /> 백스토리
-              </a>
-              <a href="#scenarios">
-                <Upload size={17} /> 세션
-              </a>
-              <a href="#memo">
-                <FileText size={17} /> 메모
-              </a>
+              {renderSidebarLink('basic', <UserRound size={17} />, '탐사자정보')}
+              {renderSidebarLink('stats', <Sparkles size={17} />, '특성치')}
+              {renderSidebarLink('skills', <BookOpen size={17} />, '기능치')}
+              {renderSidebarLink('combat', <Shield size={17} />, '전투')}
+              {renderSidebarLink('story', <FileText size={17} />, '백스토리')}
+              {renderSidebarLink('scenarios', <Upload size={17} />, '세션')}
+              {renderSidebarLink('memo', <FileText size={17} />, '메모')}
             </>
           )}
         </nav>
@@ -1084,6 +1159,49 @@ function App() {
                 <TextField label="성별" value={sheet.basic.gender} onChange={(value) => updateBasic('gender', value)} />
                 <ColorField label="캐릭터 색상" value={sheet.basic.color} onChange={(value) => updateBasic('color', value)} />
                 <TextField label="이미지 주소" value={sheet.basic.imageUrl} onChange={(value) => updateBasic('imageUrl', value)} wide />
+                <div className="field standing-image-field wide">
+                  <div className="field-label-row">
+                    <span>표정별 이미지</span>
+                    <button type="button" onClick={addStandingImage}>
+                      <Plus size={14} />
+                      추가
+                    </button>
+                  </div>
+                  {sheet.basic.standingImages.length === 0 ? (
+                    <p className="field-hint">라벨과 이미지 주소를 추가하면 팔레트 복사에 함께 포함됩니다.</p>
+                  ) : (
+                    <div className="standing-image-list">
+                      {sheet.basic.standingImages.map((standingImage, index) => (
+                        <div className="standing-image-row" key={`standing-image-${index}`}>
+                          <input
+                            aria-label={`표정 라벨 ${index + 1}`}
+                            placeholder="@미소"
+                            value={standingImage.label}
+                            onChange={(event) =>
+                              updateStandingImage(index, 'label', event.target.value)
+                            }
+                          />
+                          <input
+                            aria-label={`표정 이미지 주소 ${index + 1}`}
+                            placeholder="https://example.com/expression.png"
+                            value={standingImage.imageUrl}
+                            onChange={(event) =>
+                              updateStandingImage(index, 'imageUrl', event.target.value)
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="icon-only danger"
+                            onClick={() => removeStandingImage(index)}
+                            title="표정 이미지 삭제"
+                          >
+                            <X size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </CollapsibleSection>
@@ -1604,12 +1722,17 @@ function UsageGuidePage() {
       <div className="usage-guide-grid">
         {usageGuideSections.map((section) => (
           <article className="usage-guide-card" key={section.title}>
-            <img
-              className="usage-guide-image"
-              src={section.imageSrc}
-              alt={section.imageAlt}
-              loading="lazy"
-            />
+            <div className={`usage-guide-images image-count-${section.images.length}`}>
+              {section.images.map((image) => (
+                <img
+                  className="usage-guide-image"
+                  src={image.src}
+                  alt={image.alt}
+                  loading="lazy"
+                  key={image.src}
+                />
+              ))}
+            </div>
             <div className="usage-guide-card-body">
               <h3>{section.title}</h3>
               <p>{section.description}</p>
@@ -1992,34 +2115,38 @@ function InsaneSheetView({
     }));
   }
 
-  function addInsanePortrait() {
+  function addInsaneStandingImage() {
     setSheet((current) => ({
       ...current,
       basic: {
         ...current.basic,
-        extraImageUrls: [...current.basic.extraImageUrls, ''],
+        standingImages: [...current.basic.standingImages, { label: '', imageUrl: '' }],
       },
     }));
   }
 
-  function updateInsaneExtraImageUrl(index: number, value: string) {
+  function updateInsaneStandingImage(
+    index: number,
+    key: keyof InsaneSheetState['basic']['standingImages'][number],
+    value: string,
+  ) {
     setSheet((current) => ({
       ...current,
       basic: {
         ...current.basic,
-        extraImageUrls: current.basic.extraImageUrls.map((imageUrl, imageIndex) =>
-          imageIndex === index ? value : imageUrl,
+        standingImages: current.basic.standingImages.map((image, imageIndex) =>
+          imageIndex === index ? { ...image, [key]: value } : image,
         ),
       },
     }));
   }
 
-  function removeInsanePortrait(index: number) {
+  function removeInsaneStandingImage(index: number) {
     setSheet((current) => ({
       ...current,
       basic: {
         ...current.basic,
-        extraImageUrls: current.basic.extraImageUrls.filter((_, imageIndex) => imageIndex !== index),
+        standingImages: current.basic.standingImages.filter((_, imageIndex) => imageIndex !== index),
       },
     }));
   }
@@ -2256,11 +2383,11 @@ function InsaneSheetView({
     ...(sheet.basic.imageUrl.trim()
       ? [{ imageUrl: sheet.basic.imageUrl.trim(), label: '대표', alt: '봉마인 대표 이미지' }]
       : []),
-    ...sheet.basic.extraImageUrls
-      .map((imageUrl, index) => ({
-        imageUrl: imageUrl.trim(),
-        label: `추가 ${index + 1}`,
-        alt: `봉마인 추가 이미지 ${index + 1}`,
+    ...sheet.basic.standingImages
+      .map((image, index) => ({
+        imageUrl: image.imageUrl.trim(),
+        label: image.label.trim() || `표정 ${index + 1}`,
+        alt: `봉마인 표정 이미지 ${index + 1}`,
       }))
       .filter((item) => item.imageUrl),
   ];
@@ -2301,30 +2428,51 @@ function InsaneSheetView({
             <TextField label="성별" value={sheet.basic.gender} onChange={(value) => updateBasic('gender', value)} />
             <ColorField label="캐릭터 색상" value={sheet.basic.color} onChange={(value) => updateBasic('color', value)} />
             <div className="field insane-portrait-url-field wide">
+              <span>이미지 주소</span>
+              <input value={sheet.basic.imageUrl} onChange={(event) => updateBasic('imageUrl', event.target.value)} />
+            </div>
+            <div className="field standing-image-field wide">
               <div className="field-label-row">
-                <span>이미지 주소</span>
-                <button type="button" onClick={addInsanePortrait}>
-                  +add
+                <span>표정별 이미지</span>
+                <button type="button" onClick={addInsaneStandingImage}>
+                  <Plus size={14} />
+                  추가
                 </button>
               </div>
-              <input value={sheet.basic.imageUrl} onChange={(event) => updateBasic('imageUrl', event.target.value)} />
-              {sheet.basic.extraImageUrls.map((imageUrl, index) => (
-                <div className="insane-extra-portrait-row" key={`extra-portrait-${index}`}>
-                  <input
-                    aria-label={`추가 이미지 주소 ${index + 1}`}
-                    value={imageUrl}
-                    onChange={(event) => updateInsaneExtraImageUrl(index, event.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="icon-only danger"
-                    onClick={() => removeInsanePortrait(index)}
-                    title="추가 이미지 주소 삭제"
-                  >
-                    <X size={15} />
-                  </button>
+              {sheet.basic.standingImages.length === 0 ? (
+                <p className="field-hint">라벨과 이미지 주소를 추가하면 팔레트 복사에 함께 포함됩니다.</p>
+              ) : (
+                <div className="standing-image-list">
+                  {sheet.basic.standingImages.map((standingImage, index) => (
+                    <div className="standing-image-row" key={`insane-standing-image-${index}`}>
+                      <input
+                        aria-label={`인세인 표정 라벨 ${index + 1}`}
+                        placeholder="@미소"
+                        value={standingImage.label}
+                        onChange={(event) =>
+                          updateInsaneStandingImage(index, 'label', event.target.value)
+                        }
+                      />
+                      <input
+                        aria-label={`인세인 표정 이미지 주소 ${index + 1}`}
+                        placeholder="https://example.com/expression.png"
+                        value={standingImage.imageUrl}
+                        onChange={(event) =>
+                          updateInsaneStandingImage(index, 'imageUrl', event.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-only danger"
+                        onClick={() => removeInsaneStandingImage(index)}
+                        title="표정 이미지 삭제"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

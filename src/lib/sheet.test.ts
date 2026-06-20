@@ -18,6 +18,7 @@ describe('basic investigator info', () => {
       color: '',
       birthplace: '',
       imageUrl: '',
+      standingImages: [],
     });
   });
 
@@ -38,12 +39,30 @@ describe('basic investigator info', () => {
       color: '',
       birthplace: '',
       imageUrl: '',
+      standingImages: [],
     });
   });
 
   it('keeps a portrait image URL in basic info', () => {
     expect(normalizeBasicInfo({ imageUrl: 'https://example.com/portrait.png' })).toMatchObject({
       imageUrl: 'https://example.com/portrait.png',
+    });
+  });
+
+  it('keeps expression standing image labels and URLs in basic info', () => {
+    expect(
+      normalizeBasicInfo({
+        standingImages: [
+          { label: ' @미소 ', imageUrl: ' https://example.com/smile.png ' },
+          { label: '펌블', imageUrl: 'https://example.com/fumble.png' },
+          { label: '무효', imageUrl: 10 as unknown as string },
+        ],
+      }),
+    ).toMatchObject({
+      standingImages: [
+        { label: ' @미소 ', imageUrl: ' https://example.com/smile.png ' },
+        { label: '펌블', imageUrl: 'https://example.com/fumble.png' },
+      ],
     });
   });
 

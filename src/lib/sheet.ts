@@ -1,5 +1,10 @@
 import { clampPercent } from './character';
 
+export interface StandingImage {
+  label: string;
+  imageUrl: string;
+}
+
 export interface BasicInfo {
   name: string;
   player: string;
@@ -9,6 +14,7 @@ export interface BasicInfo {
   color: string;
   birthplace: string;
   imageUrl: string;
+  standingImages: StandingImage[];
 }
 
 export interface SanityInfo {
@@ -27,6 +33,7 @@ export function createDefaultBasicInfo(): BasicInfo {
     color: '',
     birthplace: '',
     imageUrl: '',
+    standingImages: [],
   };
 }
 
@@ -45,7 +52,30 @@ export function normalizeBasicInfo(
     color: value?.color ?? fallback.color,
     birthplace: value?.birthplace ?? fallback.birthplace,
     imageUrl: value?.imageUrl ?? fallback.imageUrl,
+    standingImages: normalizeStandingImages(value?.standingImages),
   };
+}
+
+function normalizeStandingImages(value: unknown): StandingImage[] {
+  if (!Array.isArray(value)) return [];
+
+  const standingImages: StandingImage[] = [];
+
+  value.forEach((item) => {
+    if (!isRecord(item)) return;
+    if (typeof item.label !== 'string' || typeof item.imageUrl !== 'string') return;
+
+    standingImages.push({
+      label: item.label,
+      imageUrl: item.imageUrl,
+    });
+  });
+
+  return standingImages;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 export function createDefaultSanityInfo(pow: number): SanityInfo {

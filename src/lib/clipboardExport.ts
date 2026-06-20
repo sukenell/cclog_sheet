@@ -16,6 +16,11 @@ export interface ClipboardWeapon {
   damage: string;
 }
 
+export interface ClipboardFace {
+  label: string;
+  iconUrl: string;
+}
+
 export interface CharacterClipboardSource {
   name: string;
   stats: InvestigatorStats;
@@ -23,6 +28,8 @@ export interface CharacterClipboardSource {
   skills: SheetSkill[];
   weapons: ClipboardWeapon[];
   edition?: CocEdition;
+  iconUrl?: string;
+  faces?: ClipboardFace[];
 }
 
 export interface CharacterClipboardPayload {
@@ -32,6 +39,8 @@ export interface CharacterClipboardPayload {
     initiative: number;
     status: Array<{ label: string; value: number; max: number }>;
     params: Array<{ label: string; value: string }>;
+    iconUrl: string;
+    faces: ClipboardFace[];
     commands: string;
   };
 }
@@ -224,6 +233,8 @@ export function buildCharacterClipboardPayload(
         { label: '체구', value: String(derived.build) },
         { label: 'DB', value: derived.damageBonus },
       ],
+      iconUrl: source.iconUrl?.trim() ?? '',
+      faces: normalizeClipboardFaces(source.faces),
       commands: buildCharacterCommands(source, edition),
     },
   };
@@ -233,6 +244,15 @@ export function serializeCharacterClipboardPayload(
   payload: CharacterClipboardPayload,
 ): string {
   return JSON.stringify(payload, null, 2);
+}
+
+function normalizeClipboardFaces(faces: ClipboardFace[] | undefined): ClipboardFace[] {
+  return (faces ?? [])
+    .map((face) => ({
+      label: face.label.trim(),
+      iconUrl: face.iconUrl.trim(),
+    }))
+    .filter((face) => face.label && face.iconUrl);
 }
 
 export function buildSecretDiceRollOptions(

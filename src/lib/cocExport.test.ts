@@ -57,6 +57,7 @@ const sheet = {
     color: '#68c870',
     birthplace: '서울',
     imageUrl: 'https://example.com/portrait.png',
+    standingImages: [],
   },
   stats: {
     STR: 60,

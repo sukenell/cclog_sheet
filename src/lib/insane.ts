@@ -41,11 +41,20 @@ export interface InsaneScpAbility {
   effect: string;
 }
 
+export interface InsaneStandingImage {
+  label: string;
+  imageUrl: string;
+}
+
 export interface InsaneCcfoliaCharacter {
   kind: 'character';
   data: {
     name: string;
     iconUrl: string;
+    faces: {
+      label: string;
+      iconUrl: string;
+    }[];
     status: {
       label: string;
       value: number;
@@ -71,6 +80,7 @@ export interface InsaneSheetState {
     color: string;
     imageUrl: string;
     extraImageUrls: string[];
+    standingImages: InsaneStandingImage[];
   };
   vitals: {
     life: {
@@ -163,6 +173,7 @@ export function createInitialInsaneSheet(): InsaneSheetState {
       color: '',
       imageUrl: '',
       extraImageUrls: [],
+      standingImages: [],
     },
     vitals: {
       life: {
@@ -222,6 +233,7 @@ export function normalizeInsaneSheet(value: unknown): InsaneSheetState {
   if (!isRecord(value)) return fallback;
 
   const basic = isRecord(value.basic) ? value.basic : {};
+  const extraImageUrls = stringArrayValue(basic.extraImageUrls);
   const vitals = isRecord(value.vitals) ? value.vitals : {};
   const life = isRecord(vitals.life) ? vitals.life : {};
   const sanity = isRecord(vitals.sanity) ? vitals.sanity : {};
@@ -237,7 +249,8 @@ export function normalizeInsaneSheet(value: unknown): InsaneSheetState {
       merit: nonNegativeNumber(basic.merit, fallback.basic.merit),
       color: stringValue(basic.color),
       imageUrl: stringValue(basic.imageUrl),
-      extraImageUrls: stringArrayValue(basic.extraImageUrls),
+      extraImageUrls,
+      standingImages: normalizeInsaneStandingImages(basic.standingImages, extraImageUrls),
     },
     vitals: {
       life: {
@@ -282,15 +295,16 @@ export function buildInsaneChatPalette(sheet: InsaneSheetState): string {
       return `【${ability.name.trim()}】 ${ability.type.trim()}${specialty}   「${ability.effect.trim()}」 #어빌`;
     });
 
-  const rollLines = insaneSpecialtyNames.map((name) => `2D6>={${name}}  🎲ROLL`);
+  const rollLines = insaneSpecialtyNames.map((name) => `2D6>={${name}} - 🎲 ${name} ROLL`);
 
   return [
-    `　✦호기심: ${sheet.curiosity}　　✦공포심: ${sheet.fear}`,
+    `『• • • ✎ 호기심: ${sheet.curiosity} • • •』`,
+    `✥﹤┈┈ 공포심: ${sheet.fear} ┈┈﹥✥`,
     '',
-    '────────🌠Ability',
+    '▁ ▂ ▃ ▄ ▅ ▆ ▇ ▌　Ability 목록　 ▌ ▇ ▆ ▅ ▄ ▃ ▂ ▁',
     ...abilityLines,
     '',
-    '2D6──────🎲Roll',
+    '2D6 - 🎲  ROLL',
     ...rollLines,
   ].join('\n');
 }
@@ -301,6 +315,7 @@ export function buildInsaneCcfoliaCharacter(sheet: InsaneSheetState): InsaneCcfo
     data: {
       name: sheet.basic.name.trim() || '새로운 봉마인',
       iconUrl: sheet.basic.imageUrl.trim(),
+      faces: normalizeInsaneCcfoliaFaces(sheet.basic.standingImages),
       status: [
         { label: '생명력', value: sheet.vitals.life.current, max: sheet.vitals.life.max },
         { label: '이성치', value: calculateInsaneEffectiveSanity(sheet), max: sheet.vitals.sanity.max },
@@ -317,6 +332,17 @@ export function buildInsaneCcfoliaCharacter(sheet: InsaneSheetState): InsaneCcfo
 
 export function serializeInsaneCcfoliaCharacter(sheet: InsaneSheetState): string {
   return JSON.stringify(buildInsaneCcfoliaCharacter(sheet));
+}
+
+function normalizeInsaneCcfoliaFaces(
+  standingImages: InsaneStandingImage[],
+): Array<{ label: string; iconUrl: string }> {
+  return standingImages
+    .map((image) => ({
+      label: image.label.trim(),
+      iconUrl: image.imageUrl.trim(),
+    }))
+    .filter((image) => image.label && image.iconUrl);
 }
 
 export function rollInsaneRandomSetup(
@@ -500,6 +526,34 @@ function stringValue(value: unknown): string {
 
 function stringArrayValue(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function normalizeInsaneStandingImages(
+  value: unknown,
+  fallbackImageUrls: string[] = [],
+): InsaneStandingImage[] {
+  const standingImages: InsaneStandingImage[] = [];
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => {
+      if (!isRecord(item)) return;
+
+      const label = stringValue(item.label).trim();
+      const imageUrl = stringValue(item.imageUrl).trim();
+      if (!label || !imageUrl) return;
+
+      standingImages.push({ label, imageUrl });
+    });
+  }
+
+  if (standingImages.length > 0) return standingImages;
+
+  return fallbackImageUrls
+    .map((imageUrl, index) => ({
+      label: `추가 ${index + 1}`,
+      imageUrl: imageUrl.trim(),
+    }))
+    .filter((item) => item.imageUrl);
 }
 
 function nonNegativeNumber(value: unknown, fallback: number): number {

@@ -95,5 +95,6 @@ function createRedactedBasicInfo(): BasicInfo {
     color: '',
     birthplace: '',
     imageUrl: '',
+    standingImages: [],
   };
 }

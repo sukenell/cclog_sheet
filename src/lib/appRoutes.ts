@@ -17,6 +17,10 @@ export function createAppPath(basePath: string, page: AppPage): string {
   return normalizedBasePath ? `${normalizedBasePath}/` : '/';
 }
 
+export function createSheetSectionPath(basePath: string, sectionId: string): string {
+  return `${createAppPath(basePath, 'sheet')}#${sectionId}`;
+}
+
 export function getAppPageFromPath(pathname: string, basePath: string): AppPage {
   const normalizedPath = normalizePath(pathname);
   const helpPath = normalizePath(createAppPath(basePath, 'usage'));

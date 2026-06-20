@@ -95,6 +95,39 @@ describe('buildCharacterClipboardPayload', () => {
     expect(payload.data.commands).toContain('2d6+{DB}  테스트 검');
   });
 
+  it('includes portrait and expression standing images in character payload', () => {
+    const payload = buildCharacterClipboardPayload({
+      name: '표정 테스트',
+      stats,
+      sanity,
+      skills,
+      weapons: [],
+      iconUrl: ' https://example.com/main.png ',
+      faces: [
+        {
+          label: ' @미소 ',
+          iconUrl: ' https://example.com/smile.png ',
+        },
+        {
+          label: '',
+          iconUrl: 'https://example.com/no-label.png',
+        },
+        {
+          label: '@화남',
+          iconUrl: '',
+        },
+      ],
+    });
+
+    expect(payload.data.iconUrl).toBe('https://example.com/main.png');
+    expect(payload.data.faces).toEqual([
+      {
+        label: '@미소',
+        iconUrl: 'https://example.com/smile.png',
+      },
+    ]);
+  });
+
   it('serializes to clipboard-ready JSON', () => {
     const text = serializeCharacterClipboardPayload(
       buildCharacterClipboardPayload({

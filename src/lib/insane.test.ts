@@ -41,6 +41,7 @@ describe('inSANe sheet model', () => {
     expect(sheet.vitals.sanity).toEqual({ current: 6, max: 6, confused: false });
     expect(sheet.basic.player).toBe('');
     expect(sheet.basic.extraImageUrls).toEqual([]);
+    expect(sheet.basic.standingImages).toEqual([]);
     expect(sheet.items.painkiller).toBe(0);
     expect(sheet.items.weapon).toBe(0);
     expect(sheet.items.charm).toBe(0);
@@ -71,6 +72,55 @@ describe('inSANe sheet model', () => {
       '',
       'https://example.com/two.png',
     ]);
+    expect(sheet.basic.standingImages).toEqual([
+      { label: '추가 1', imageUrl: 'https://example.com/one.png' },
+      { label: '추가 3', imageUrl: 'https://example.com/two.png' },
+    ]);
+  });
+
+  it('keeps labeled standing images in normalized InSane sheets', () => {
+    const sheet = normalizeInsaneSheet({
+      basic: {
+        standingImages: [
+          { label: '@미소', imageUrl: 'https://example.com/smile.png' },
+          { label: '', imageUrl: 'https://example.com/no-label.png' },
+          { label: '@화남', imageUrl: '' },
+          { label: '@놀람', imageUrl: 'https://example.com/surprise.png' },
+          { label: 10, imageUrl: 'https://example.com/invalid.png' },
+        ],
+      },
+    });
+
+    expect(sheet.basic.standingImages).toEqual([
+      { label: '@미소', imageUrl: 'https://example.com/smile.png' },
+      { label: '@놀람', imageUrl: 'https://example.com/surprise.png' },
+    ]);
+  });
+
+  it('copies InSane labeled standing images as CCFOLIA faces', () => {
+    const sheet = createInitialInsaneSheet();
+
+    sheet.basic.name = '표정 봉마인';
+    sheet.basic.imageUrl = ' https://example.com/main.png ';
+    sheet.basic.standingImages = [
+      { label: ' @미소 ', imageUrl: ' https://example.com/smile.png ' },
+      { label: '', imageUrl: 'https://example.com/no-label.png' },
+      { label: '@화남', imageUrl: '' },
+    ];
+    sheet.curiosity = '1. 폭력';
+    sheet.fear = '소각';
+    sheet.skills.소각.checked = true;
+
+    expect(buildInsaneCcfoliaCharacter(sheet).data).toMatchObject({
+      name: '표정 봉마인',
+      iconUrl: 'https://example.com/main.png',
+      faces: [
+        {
+          label: '@미소',
+          iconUrl: 'https://example.com/smile.png',
+        },
+      ],
+    });
   });
 
   it('requires checked specialties, curiosity, and fear before copying the palette', () => {
@@ -146,15 +196,18 @@ describe('inSANe sheet model', () => {
 
   it('builds all roll commands using Cocofolia params', () => {
     const sheet = createInitialInsaneSheet();
-    sheet.curiosity = '1. 폭력';
-    sheet.fear = '우주';
+    sheet.curiosity = '4. 기술';
+    sheet.fear = '민속학';
     sheet.skills.소각.checked = true;
     const palette = buildInsaneChatPalette(sheet);
 
-    expect(palette).toContain('────────🌠Ability');
+    expect(palette).toContain('『• • • ✎ 호기심: 4. 기술 • • •』\n✥﹤┈┈ 공포심: 민속학 ┈┈﹥✥');
+    expect(palette).not.toContain('　✦호기심');
+    expect(palette).toContain('▁ ▂ ▃ ▄ ▅ ▆ ▇ ▌　Ability 목록　 ▌ ▇ ▆ ▅ ▄ ▃ ▂ ▁');
     expect(palette).toContain('【기본공격】 공격 《소각》');
-    expect(palette).toContain('2D6>={소각}');
-    expect(palette).toContain('2D6>={우주}');
+    expect(palette).toContain('2D6 - 🎲  ROLL');
+    expect(palette).toContain('2D6>={소각} - 🎲 소각 ROLL');
+    expect(palette).toContain('2D6>={민속학} - 🎲 민속학 ROLL');
   });
 
   it('builds a Cocofolia character payload with calculated params', () => {

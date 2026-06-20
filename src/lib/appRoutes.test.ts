@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createAppPath, getAppPageFromPath, normalizeAppBasePath } from './appRoutes';
+import {
+  createAppPath,
+  createSheetSectionPath,
+  getAppPageFromPath,
+  normalizeAppBasePath,
+} from './appRoutes';
 
 describe('app route helpers', () => {
   it('builds sheet and usage guide paths under the GitHub Pages base path', () => {
@@ -7,6 +12,7 @@ describe('app route helpers', () => {
 
     expect(createAppPath(basePath, 'sheet')).toBe('/cclog_sheet/');
     expect(createAppPath(basePath, 'usage')).toBe('/cclog_sheet/help');
+    expect(createSheetSectionPath(basePath, 'skills')).toBe('/cclog_sheet/#skills');
   });
 
   it('opens the usage guide when the current path is /help', () => {

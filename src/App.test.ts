@@ -64,6 +64,7 @@ describe('topbar archive controls', () => {
 
   it('opens a usage guide page from the CCLog Sheet brand help icon', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
     expect(source).toContain('HelpCircle');
     expect(source).toContain(
@@ -76,7 +77,24 @@ describe('topbar archive controls', () => {
     expect(source).toContain('title="사용방법"');
     expect(source).toContain('UsageGuidePage');
     expect(source).toContain('사용방법');
+    expect(source).toContain('<HelpCircle size={20} />');
+    expect(styles).toContain('width: 32px;');
+    expect(styles).toContain('height: 32px;');
+    expect(styles).toContain('.brand-help-button svg');
     expect(source).not.toContain('세부 내용은 여기에 작성하세요.');
+  });
+
+  it('routes sidebar section links back to the sheet from the usage guide page', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('createSheetSectionPath');
+    expect(source).toContain('function showSheetSection(event: MouseEvent<HTMLAnchorElement>, sectionId: SheetSectionId)');
+    expect(source).toContain("navigateToPage('sheet', sectionId);");
+    expect(source).toContain('href={createSheetSectionPath(appBasePath, sectionId)}');
+    expect(source).toContain("renderSidebarLink('skills'");
+    expect(source).toContain("renderSidebarLink('basic'");
+    expect(source).not.toContain('<a href="#skills">');
+    expect(source).not.toContain('<a href="#basic">');
   });
 
   it('renders usage guide cards with individual copy and images', () => {
@@ -86,15 +104,19 @@ describe('topbar archive controls', () => {
     expect(source).toContain('title: \'1. 시트 작성하기\'');
     expect(source).toContain('title: \'3.비밀 주사위 복사\'');
     expect(source).toContain('description:');
-    expect(source).toContain('imageSrc:');
-    expect(source).toContain('imageAlt:');
-    expect(source).toContain('usage-guide-basic-flow.svg');
-    expect(source).toContain('usage-guide-inputs.svg');
-    expect(source).toContain('usage-guide-export-import.svg');
-    expect(source).toContain('usage-guide-faq.svg');
+    expect(source).toContain('type UsageGuideImages =');
+    expect(source).toContain('images: [');
+    expect(source).not.toContain('imageSrc:');
+    expect(source).not.toContain('imageAlt:');
+    expect(source).toContain('usage-guide/usage-guide-basic-flow.svg');
+    expect(source).toContain('usage-guide/usage-guide-inputs.svg');
+    expect(source).toContain('usage-guide/usage-guide-export-import.svg');
+    expect(source).toContain('usage-guide/usage-guide-faq.svg');
     expect(source).toContain('<img');
     expect(source).toContain('className="usage-guide-image"');
-    expect(source).toContain('alt={section.imageAlt}');
+    expect(source).toContain('section.images.map((image)');
+    expect(source).toContain('src={image.src}');
+    expect(source).toContain('alt={image.alt}');
     expect(source).toContain('{section.description}');
     expect(source).not.toContain('guideSections.map((title)');
     expect(source).not.toContain('기능치와 특성치를 입력후, \'팔레트 복사\'');
@@ -115,19 +137,23 @@ describe('topbar archive controls', () => {
     expect(secretDiceGuideBlock).toContain('확장 프로그램');
   });
 
-  it('keeps usage guide image assets available from the public directory', () => {
+  it('keeps usage guide image assets together in the public usage-guide directory', () => {
     const imageFiles = [
       'usage-guide-basic-flow.svg',
       'usage-guide-inputs.svg',
       'usage-guide-export-import.svg',
       'usage-guide-faq.svg',
     ];
+    const imageDir = resolve(process.cwd(), 'public', 'usage-guide');
+
+    expect(existsSync(imageDir)).toBe(true);
 
     imageFiles.forEach((fileName) => {
-      const filePath = resolve(process.cwd(), 'public', fileName);
+      const filePath = resolve(imageDir, fileName);
 
       expect(existsSync(filePath)).toBe(true);
       expect(readFileSync(filePath, 'utf8')).toContain('<svg');
+      expect(existsSync(resolve(process.cwd(), 'public', fileName))).toBe(false);
     });
   });
 
@@ -234,20 +260,23 @@ describe('topbar archive controls', () => {
     expect(basic2Block).toContain('NumberField label="공적점"');
   });
 
-  it('lets InSane sheets keep additional portrait URLs beside the main portrait', () => {
+  it('lets InSane sheets keep labeled standing images beside the main portrait', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
     const basicStart = source.indexOf('title="봉마인 정보"');
     const basic2Start = source.indexOf('title="봉마인 정보2"');
     const basicBlock = source.slice(basicStart, basic2Start);
 
-    expect(source).toContain('addInsanePortrait');
-    expect(source).toContain('updateInsaneExtraImageUrl');
-    expect(source).toContain('removeInsanePortrait');
-    expect(basicBlock).toContain('+add');
+    expect(source).toContain('addInsaneStandingImage');
+    expect(source).toContain('updateInsaneStandingImage');
+    expect(source).toContain('removeInsaneStandingImage');
+    expect(basicBlock).toContain('표정별 이미지');
+    expect(basicBlock).toContain('aria-label={`인세인 표정 라벨 ${index + 1}`}');
+    expect(basicBlock).toContain('aria-label={`인세인 표정 이미지 주소 ${index + 1}`}');
     expect(basicBlock).toContain('insane-portrait-strip');
-    expect(basicBlock).toContain('sheet.basic.extraImageUrls.map');
+    expect(basicBlock).toContain('sheet.basic.standingImages.map');
     expect(styles).toContain('.insane-portrait-strip');
+    expect(styles).toContain('.standing-image-row');
     expect(styles).toContain('overflow-x: auto;');
   });
 
@@ -285,9 +314,9 @@ describe('topbar archive controls', () => {
     const insaneMemoStart = source.indexOf('title="메모"', insaneSessionStart);
     const insaneSessionBlock = source.slice(insaneSessionStart, insaneMemoStart);
 
-    expect(cocNav).toContain('href="#scenarios"');
+    expect(cocNav).toContain("renderSidebarLink('scenarios'");
     expect(cocNav).toContain('세션');
-    expect(cocNav).toContain('href="#memo"');
+    expect(cocNav).toContain("renderSidebarLink('memo'");
     expect(cocNav).toContain('메모');
     expect(source).not.toContain('완료 시나리오');
     expect(cocSessionBlock).toContain('title="세션"');
@@ -369,6 +398,21 @@ describe('topbar archive controls', () => {
     expect(source).not.toContain('uploadPortrait');
     expect(source).not.toContain('ImagePlus');
     expect(source).not.toContain('accept="image/*"');
+  });
+
+  it('lets COC sheets add labeled expression standing images below the image URL', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const cocBasicStart = source.indexOf('title="탐사자정보"');
+    const cocStatsStart = source.indexOf('title="특성치"', cocBasicStart);
+    const cocBasicBlock = source.slice(cocBasicStart, cocStatsStart);
+
+    expect(cocBasicBlock).toContain('표정별 이미지');
+    expect(cocBasicBlock).toContain('addStandingImage');
+    expect(cocBasicBlock).toContain('updateStandingImage');
+    expect(cocBasicBlock).toContain('removeStandingImage');
+    expect(cocBasicBlock).toContain('aria-label={`표정 라벨 ${index + 1}`}');
+    expect(cocBasicBlock).toContain('aria-label={`표정 이미지 주소 ${index + 1}`}');
+    expect(source).toContain('faces: sheet.basic.standingImages.map');
   });
 
   it('uses the Clipboard API before the textarea fallback', () => {
