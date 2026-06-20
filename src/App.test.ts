@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -34,14 +34,26 @@ describe('topbar archive controls', () => {
     expect(importBlock).not.toContain("if (gameSystem === 'insan')");
   });
 
-  it('offers COC 7th edition, COC 6th edition, and InSane as selectable sheet systems', () => {
+  it('offers updated sheet system labels while keeping the COC 6th edition option commented out', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const jsxCommentBlocks = [...source.matchAll(/\{\/\*[\s\S]*?\*\/\}/g)].map(
+      ([block]) => block,
+    );
+    const systemSelectStart = source.indexOf('className="game-system-select"');
+    const systemSelectEnd = source.indexOf('</select>', systemSelectStart);
+    const systemSelectBlock = source.slice(systemSelectStart, systemSelectEnd);
+    const visibleSystemSelectBlock = systemSelectBlock.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 
     expect(source).toContain('className="game-system-select"');
     expect(source).toContain("type GameSystem = 'coc7' | 'coc6' | 'insan';");
-    expect(source).toContain('COC 7판');
-    expect(source).toContain('COC 6판');
-    expect(source).toContain('InSane');
+    expect(visibleSystemSelectBlock).toContain('7판 시트');
+    expect(visibleSystemSelectBlock).toContain('InSane 시트');
+    expect(visibleSystemSelectBlock).not.toContain('COC 6판');
+    expect(
+      jsxCommentBlocks.some(
+        (block) => block.includes('value="coc6"') && block.includes('COC 6판'),
+      ),
+    ).toBe(true);
     expect(source).toContain('value="insan"');
     expect(source).toContain('handleGameSystemChange');
     expect(source).toContain('convertCocSheetEdition');
@@ -54,13 +66,69 @@ describe('topbar archive controls', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 
     expect(source).toContain('HelpCircle');
-    expect(source).toContain("const [activePage, setActivePage] = useState<AppPage>('sheet');");
+    expect(source).toContain(
+      'const [activePage, setActivePage] = useState<AppPage>(() => getAppPageFromPath(window.location.pathname, appBasePath));',
+    );
+    expect(source).toContain('const helpPath = createAppPath(appBasePath, \'usage\');');
+    expect(source).toContain('href={helpPath}');
     expect(source).toContain('aria-label="사용방법 보기"');
-    expect(source).toContain('onClick={() => setActivePage(\'usage\')}');
+    expect(source).toContain('onClick={showUsagePage}');
     expect(source).toContain('title="사용방법"');
     expect(source).toContain('UsageGuidePage');
     expect(source).toContain('사용방법');
-    expect(source).toContain('세부 내용은 여기에 작성하세요.');
+    expect(source).not.toContain('세부 내용은 여기에 작성하세요.');
+  });
+
+  it('renders usage guide cards with individual copy and images', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('const usageGuideSections = [');
+    expect(source).toContain('title: \'1. 시트 작성하기\'');
+    expect(source).toContain('title: \'3.비밀 주사위 복사\'');
+    expect(source).toContain('description:');
+    expect(source).toContain('imageSrc:');
+    expect(source).toContain('imageAlt:');
+    expect(source).toContain('usage-guide-basic-flow.svg');
+    expect(source).toContain('usage-guide-inputs.svg');
+    expect(source).toContain('usage-guide-export-import.svg');
+    expect(source).toContain('usage-guide-faq.svg');
+    expect(source).toContain('<img');
+    expect(source).toContain('className="usage-guide-image"');
+    expect(source).toContain('alt={section.imageAlt}');
+    expect(source).toContain('{section.description}');
+    expect(source).not.toContain('guideSections.map((title)');
+    expect(source).not.toContain('기능치와 특성치를 입력후, \'팔레트 복사\'');
+  });
+
+  it('links the secret dice extension text to the Chrome Web Store listing', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const secretDiceGuideStart = source.indexOf("title: '3.비밀 주사위 복사'");
+    const nextGuideStart = source.indexOf("title: '4.어빌리티 자동화(인세인)'", secretDiceGuideStart);
+    const secretDiceGuideBlock = source.slice(secretDiceGuideStart, nextGuideStart);
+
+    expect(source).toContain(
+      "const r20JsonExporterUrl = 'https://chromewebstore.google.com/detail/r20-jsonexporter/galgbmfkkpehcijjfcaffifmfjbmlfbo?utm_source=item-share-cb';",
+    );
+    expect(secretDiceGuideBlock).toContain('href={r20JsonExporterUrl}');
+    expect(secretDiceGuideBlock).toContain('target="_blank"');
+    expect(secretDiceGuideBlock).toContain('rel="noreferrer"');
+    expect(secretDiceGuideBlock).toContain('확장 프로그램');
+  });
+
+  it('keeps usage guide image assets available from the public directory', () => {
+    const imageFiles = [
+      'usage-guide-basic-flow.svg',
+      'usage-guide-inputs.svg',
+      'usage-guide-export-import.svg',
+      'usage-guide-faq.svg',
+    ];
+
+    imageFiles.forEach((fileName) => {
+      const filePath = resolve(process.cwd(), 'public', fileName);
+
+      expect(existsSync(filePath)).toBe(true);
+      expect(readFileSync(filePath, 'utf8')).toContain('<svg');
+    });
   });
 
   it('prompts for an InSane ability password when choosing InSane from the system dropdown', () => {

@@ -19,7 +19,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createInitialSkills,
   createSpecialtySkill,
@@ -124,6 +124,12 @@ import {
 } from './lib/sheet';
 import { detectSheetArchiveSystem, parseSheetArchive, serializeSheetArchive } from './lib/sheetArchive';
 import { splitSkillsIntoColumns } from './lib/skillColumns';
+import {
+  createAppPath,
+  getAppPageFromPath,
+  normalizeAppBasePath,
+  type AppPage,
+} from './lib/appRoutes';
 
 interface SheetState {
   basic: BasicInfo;
@@ -152,7 +158,6 @@ type SheetStateArchive = Partial<Omit<SheetState, 'weapons' | 'armors' | 'spells
 
 type CombatTab = 'weapons' | 'armor' | 'spells';
 type GameSystem = 'coc7' | 'coc6' | 'insan';
-type AppPage = 'sheet' | 'usage';
 
 const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
@@ -184,6 +189,58 @@ const backstoryFields = [
   ['injuries', '부상과 흉터 / 공포증과 집착증'],
   ['tomes', '신화서&유물 / 기이한 존재들과의 만남'],
 ];
+const appBasePath = normalizeAppBasePath(
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.BASE_URL ?? '/'),
+);
+const helpPath = createAppPath(appBasePath, 'usage');
+const sheetPath = createAppPath(appBasePath, 'sheet');
+const r20JsonExporterUrl = 'https://chromewebstore.google.com/detail/r20-jsonexporter/galgbmfkkpehcijjfcaffifmfjbmlfbo?utm_source=item-share-cb';
+
+type UsageGuideSection = {
+  title: string;
+  description: React.ReactNode;
+  imageSrc: string;
+  imageAlt: string;
+};
+
+const usageGuideSections = [
+  {
+    title: '1. 시트 작성하기',
+    description:
+      '시트 타입을 고르고, 특성치와 기능치 등의 입력 내용을 손쉽게 계산할 수 있습니다. 현재 지원하는 룰은 COC 7판과 InSane입니다.',
+    imageSrc: `${appBasePath}/usage-guide-basic-flow.svg`,
+    imageAlt: '시트 선택부터 작성 완료까지의 기본 흐름',
+  },
+  {
+    title: '2. 팔레트 복사',
+    description:
+      "상단 '팔레트복사' 버튼을 누르면, 현재 시트의 정보가 클립보드에 복사되며, 코코포리아에서 붙여넣기를 통해 바로 캐릭터 시트로 사용할 수 있습니다.",
+    imageSrc: `${appBasePath}/usage-guide-inputs.svg`,
+    imageAlt: '특성치와 기능치 입력 항목 예시',
+  },
+  {
+    title: '3.비밀 주사위 복사',
+    description: (
+      <>
+        시트를 오픈한 채, 붙여넣기 한 데이터를 붙여넣기 합니다. roll20 무료유저도
+        사용가능합니다. 해당{' '}
+        <a href={r20JsonExporterUrl} target="_blank" rel="noreferrer">
+          확장 프로그램
+        </a>
+        과 연동해서 사용합니다.
+      </>
+    ),
+    imageSrc: `${appBasePath}/usage-guide-export-import.svg`,
+    imageAlt: '내보내기와 가져오기 버튼 안내',
+  },
+  {
+    title: '4.어빌리티 자동화(인세인)',
+    description:
+      'InSane 어빌리티는 룰북내 비밀번호를 입력하면, 자동 불러오기 기능이 활성화 됩니다.',
+    imageSrc: `${appBasePath}/usage-guide-faq.svg`,
+    imageAlt: '팔레트 복사와 잠금 안내',
+  },
+] satisfies UsageGuideSection[];
 
 function createId(prefix: string): string {
   if ('crypto' in window && 'randomUUID' in window.crypto) {
@@ -216,7 +273,7 @@ function createInitialSheet(edition: CocEdition = 'coc7'): SheetState {
 }
 
 function App() {
-  const [activePage, setActivePage] = useState<AppPage>('sheet');
+  const [activePage, setActivePage] = useState<AppPage>(() => getAppPageFromPath(window.location.pathname, appBasePath));
   const [gameSystem, setGameSystem] = useState<GameSystem>(() => loadGameSystem());
   const [sheet, setSheet] = useState<SheetState>(() => loadSheet());
   const [insaneSheet, setInsaneSheet] = useState<InsaneSheetState>(() => loadInsaneSheet());
@@ -329,6 +386,15 @@ function App() {
     setIsInsaneAbilityPasswordDialogOpen(false);
   }, [gameSystem]);
 
+  useEffect(() => {
+    function handlePopState() {
+      setActivePage(getAppPageFromPath(window.location.pathname, appBasePath));
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   function updateBasic(key: keyof BasicInfo, value: string) {
     setSheet((current) => ({ ...current, basic: { ...current.basic, [key]: value } }));
   }
@@ -339,6 +405,25 @@ function App() {
 
   function toggleSidebar() {
     setIsSidebarOpen((current) => toggleSidebarOpen(current));
+  }
+
+  function navigateToPage(page: AppPage) {
+    const nextPath = createAppPath(appBasePath, page);
+
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState(null, '', nextPath);
+    }
+
+    setActivePage(page);
+  }
+
+  function showUsagePage(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    navigateToPage('usage');
+  }
+
+  function showSheetPage() {
+    navigateToPage('sheet');
   }
 
   function handleGameSystemChange(nextSystem: GameSystem) {
@@ -766,15 +851,15 @@ function App() {
           <div className="brand-copy">
             <div className="brand-title-row">
               <strong>CCLog Sheet</strong>
-              <button
-                type="button"
+              <a
                 className="brand-help-button"
+                href={helpPath}
                 aria-label="사용방법 보기"
                 title="사용방법"
-                onClick={() => setActivePage('usage')}
+                onClick={showUsagePage}
               >
                 <HelpCircle size={16} />
-              </button>
+              </a>
             </div>
             <select
               className="game-system-select"
@@ -782,9 +867,9 @@ function App() {
               value={gameSystem}
               onChange={(event) => handleGameSystemChange(event.target.value as GameSystem)}
             >
-              <option value="coc7">COC 7판</option>
-              <option value="coc6">COC 6판</option>
-              <option value="insan">InSane</option>
+              <option value="coc7">COC 7판 시트</option>
+              {/* <option value="coc6">COC 6판</option> */}
+              <option value="insan">InSane 시트</option>
             </select>
           </div>
         </div>
@@ -910,7 +995,7 @@ function App() {
             </div>
           ) : (
             <div className="toolbar" aria-label="사용방법 도구">
-              <button type="button" className="icon-button" onClick={() => setActivePage('sheet')} title="시트로 돌아가기">
+              <button type="button" className="icon-button" onClick={showSheetPage} title="시트로 돌아가기">
                 <FileText size={18} />
                 <span>시트로 돌아가기</span>
               </button>
@@ -1508,27 +1593,27 @@ function App() {
 }
 
 function UsageGuidePage() {
-  const guideSections = [
-    '기본 흐름',
-    '입력 항목',
-    '내보내기 / 가져오기',
-    '자주 묻는 질문',
-  ];
-
   return (
     <section className="usage-page" aria-labelledby="usage-guide-title">
       <div className="usage-page-header">
         <HelpCircle size={24} aria-hidden="true" />
         <div>
           <h2 id="usage-guide-title">사용방법</h2>
-          <p>세부적인 사용방법을 정리하는 공간입니다.</p>
         </div>
       </div>
       <div className="usage-guide-grid">
-        {guideSections.map((title) => (
-          <article className="usage-guide-card" key={title}>
-            <h3>{title}</h3>
-            <p>세부 내용은 여기에 작성하세요.</p>
+        {usageGuideSections.map((section) => (
+          <article className="usage-guide-card" key={section.title}>
+            <img
+              className="usage-guide-image"
+              src={section.imageSrc}
+              alt={section.imageAlt}
+              loading="lazy"
+            />
+            <div className="usage-guide-card-body">
+              <h3>{section.title}</h3>
+              <p>{section.description}</p>
+            </div>
           </article>
         ))}
       </div>

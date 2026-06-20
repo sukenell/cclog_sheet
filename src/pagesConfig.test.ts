@@ -9,6 +9,15 @@ describe('vite GitHub Pages config', () => {
     expect(source).toContain("base: '/cclog_sheet/'");
   });
 
+  it('prepares a static help route for GitHub Pages direct links', () => {
+    const packageJson = readFileSync(resolve(process.cwd(), 'package.json'), 'utf8');
+    const script = readFileSync(resolve(process.cwd(), 'scripts/prepare-pages.mjs'), 'utf8');
+
+    expect(packageJson).toContain('vite build && node scripts/prepare-pages.mjs');
+    expect(script).toContain("mkdir(resolve(distDir, 'help'), { recursive: true })");
+    expect(script).toContain("copyFile(indexFile, resolve(distDir, 'help', 'index.html'))");
+  });
+
   it('sets the public preview description metadata', () => {
     const source = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
     const previewDescription = '코코포리용 자동화 API 시트 - by Reha';

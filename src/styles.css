@@ -183,6 +183,7 @@ select:disabled {
   border-color: rgb(141 240 193 / 0.24);
   background: rgb(141 240 193 / 0.08);
   color: var(--mint);
+  text-decoration: none;
 }
 
 .brand-help-button:hover {
@@ -580,11 +581,23 @@ select:disabled {
 .usage-guide-card {
   min-width: 0;
   min-height: 150px;
-  padding: 16px;
   border: 1px solid rgb(255 255 255 / 0.11);
   border-radius: 8px;
   background: rgb(36 39 46 / 0.92);
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.usage-guide-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: rgb(20 24 30 / 0.95);
+}
+
+.usage-guide-card-body {
+  padding: 16px;
 }
 
 .usage-guide-card h3 {
@@ -597,6 +610,16 @@ select:disabled {
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.usage-guide-card a {
+  color: var(--mint);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.usage-guide-card a:hover {
+  color: #ffffff;
 }
 
 .panel {
