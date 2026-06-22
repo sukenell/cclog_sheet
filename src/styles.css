@@ -1468,6 +1468,28 @@ td {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.insane-scp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 0 16px 16px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.insane-scp-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.insane-scp-items-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
 .insane-specialty-controls {
   grid-template-columns: repeat(2, minmax(0, 1fr)) max-content;
 }
@@ -1476,6 +1498,18 @@ td {
 .insane-vital-card {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.insane-fear-controls {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.72fr) minmax(130px, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.insane-fear-controls input,
+.insane-fear-controls select {
   min-width: 0;
 }
 
@@ -1639,8 +1673,6 @@ td {
   text-align: center;
 }
 
-.insane-scp-table th,
-.insane-scp-table td,
 .insane-ability-table th,
 .insane-ability-table td,
 .insane-session-table th,
@@ -1648,14 +1680,11 @@ td {
   min-width: 120px;
 }
 
-.insane-scp-table th:nth-child(2),
-.insane-scp-table td:nth-child(2),
 .insane-ability-table th:nth-child(4),
 .insane-ability-table td:nth-child(4) {
   min-width: 360px;
 }
 
-.insane-scp-table textarea,
 .insane-ability-table textarea {
   min-height: 52px;
   padding: 8px;
@@ -1867,6 +1896,7 @@ td {
   .insane-vitals-grid,
   .insane-specialty-controls,
   .insane-items-grid,
+  .insane-scp-items-grid,
   .two-column,
   .story-grid,
   .scenario-row,

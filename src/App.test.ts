@@ -286,17 +286,37 @@ describe('topbar archive controls', () => {
 
     expect(source).toContain('curiosity-gap-column');
     expect(source).toContain('fear-specialty-cell');
+    expect(source).toContain('getInsaneFearNames(sheet.fear).includes(name)');
+    expect(source).toContain('appendInsaneFear(current.fear, event.target.value)');
+    expect(source).toContain('className="insane-fear-controls"');
+    expect(source).toContain('aria-label="공포심 직접 입력"');
     expect(source).toContain('calculateInsaneSpecialtyTarget(sheet, name)');
     expect(source).toContain('calculateInsaneEffectiveSanity(sheet)');
+    expect(source).toContain('calculateInsaneEffectiveSanityMax(sheet)');
     expect(styles).toContain('.insane-specialty-cell {\n  margin-inline: 5px;');
     expect(styles).toContain('.insane-specialty-table th.curiosity-gap-column {\n  padding-inline: 18px;');
     expect(styles).toContain('.fear-specialty-cell');
+    expect(styles).toContain('.insane-fear-controls');
   });
 
-  it('keeps SCP abilities commented out and offers random InSane setup dice', () => {
+  it('shows fixed numeric SCP items only when the InSane item toggle is enabled', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const itemStart = source.indexOf('title="아이템"');
+    const abilityStart = source.indexOf('title="어빌리티"', itemStart);
+    const itemBlock = source.slice(itemStart, abilityStart);
 
-    expect(source).toContain('{/* SCP 능력치');
+    expect(itemBlock).toContain('checked={sheet.items.scpEnabled}');
+    expect(itemBlock).toContain('onChange={(event) => updateScpEnabled(event.target.checked)}');
+    expect(itemBlock).toContain('{sheet.items.scpEnabled && (');
+    expect(itemBlock).toContain('NumberField label="네트런처"');
+    expect(itemBlock).toContain('NumberField label="기억소거"');
+    expect(itemBlock).toContain('NumberField label="기폭장치"');
+    expect(itemBlock).toContain("updateItem('scpNetLauncher', value)");
+    expect(itemBlock).toContain("updateItem('scpMemoryErase', value)");
+    expect(itemBlock).toContain("updateItem('scpDetonator', value)");
+    expect(itemBlock).not.toContain('SCP 추가');
+    expect(itemBlock).not.toContain('insane-scp-table');
+    expect(source).not.toContain('{/* SCP 능력치');
     expect(source).toContain('rollInsaneRandomSetup(current');
     expect(source).toContain('랜덤 다이스');
   });
@@ -370,6 +390,19 @@ describe('topbar archive controls', () => {
     expect(gitignore).toContain('src/data/insaneAbilities.json');
   });
 
+  it('limits InSane ability additions to eight total cards', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const abilityStart = source.indexOf('title="어빌리티"');
+    const relationshipStart = source.indexOf('title="인물란"', abilityStart);
+    const abilityBlock = source.slice(abilityStart, relationshipStart);
+
+    expect(source).toContain('insaneAbilityLimit');
+    expect(source).toContain('const canAddAbility = sheet.abilities.length < insaneAbilityLimit;');
+    expect(source).toContain('if (!canAddAbility) return current;');
+    expect(abilityBlock).toContain('disabled={!canAddAbility}');
+    expect(abilityBlock).toContain('title={canAddAbility ? \'어빌리티 추가\' : \'어빌리티는 8개까지 추가할 수 있습니다\'}');
+  });
+
   it('widens InSane ability effects while narrowing the leading controls', () => {
     const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
@@ -413,6 +446,19 @@ describe('topbar archive controls', () => {
     expect(cocBasicBlock).toContain('aria-label={`표정 라벨 ${index + 1}`}');
     expect(cocBasicBlock).toContain('aria-label={`표정 이미지 주소 ${index + 1}`}');
     expect(source).toContain('faces: sheet.basic.standingImages.map');
+  });
+
+  it('does not send a referrer when previewing external portrait images', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const cocBasicStart = source.indexOf('title="탐사자정보"');
+    const cocStatsStart = source.indexOf('title="특성치"', cocBasicStart);
+    const cocBasicBlock = source.slice(cocBasicStart, cocStatsStart);
+    const insaneBasicStart = source.indexOf('title="봉마인 정보"');
+    const insaneStatsStart = source.indexOf('title="특기"', insaneBasicStart);
+    const insaneBasicBlock = source.slice(insaneBasicStart, insaneStatsStart);
+
+    expect(cocBasicBlock).toContain('<img src={sheet.basic.imageUrl} alt="캐릭터 초상" referrerPolicy="no-referrer" />');
+    expect(insaneBasicBlock).toContain('<img src={item.imageUrl} alt={item.alt} referrerPolicy="no-referrer" />');
   });
 
   it('uses the Clipboard API before the textarea fallback', () => {

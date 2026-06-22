@@ -91,11 +91,15 @@ import {
   type SheetScenario,
 } from './lib/scenarios';
 import {
+  appendInsaneFear,
+  calculateInsaneEffectiveSanityMax,
   calculateInsaneEffectiveSanity,
   calculateInsaneSanityPenalty,
   calculateInsaneSpecialtyTarget,
   createInitialInsaneSheet,
+  getInsaneFearNames,
   getInsanePaletteCopyError,
+  insaneAbilityLimit,
   insaneSkillCategories,
   insaneSpecialtyNames,
   isDefaultInsaneAbility,
@@ -104,7 +108,6 @@ import {
   serializeInsaneCcfoliaCharacter,
   type InsaneAbility,
   type InsaneRelationship,
-  type InsaneScpAbility,
   type InsaneSession,
   type InsaneSheetState,
 } from './lib/insane';
@@ -938,9 +941,10 @@ function App() {
       ? insaneSheet.basic.name || '새로운 봉마인'
       : sheet.basic.name || '새로운 탐사자';
   const insaneTopbarSanity = calculateInsaneEffectiveSanity(insaneSheet);
+  const insaneTopbarSanityMax = calculateInsaneEffectiveSanityMax(insaneSheet);
   const topbarSubtitle =
     gameSystem === 'insan'
-      ? `${insaneSheet.basic.occupation || '직업 미정'} · 생명력 ${insaneSheet.vitals.life.current}/${insaneSheet.vitals.life.max} · 이성치 ${insaneTopbarSanity}/${insaneSheet.vitals.sanity.max}`
+      ? `${insaneSheet.basic.occupation || '직업 미정'} · 생명력 ${insaneSheet.vitals.life.current}/${insaneSheet.vitals.life.max} · 이성치 ${insaneTopbarSanity}/${insaneTopbarSanityMax}`
       : `${sheet.basic.occupation || '직업 미정'} · ${gameSystem === 'coc6' ? 'COC 6판' : 'COC 7판'} · SAN ${sanity.current}`;
   const pageTitle = activePage === 'usage' ? '사용방법' : topbarTitle;
   const pageSubtitle = activePage === 'usage' ? 'CCLog Sheet 안내' : topbarSubtitle;
@@ -1143,7 +1147,7 @@ function App() {
             <div className="basic-grid">
               <div className="portrait-box">
                 {sheet.basic.imageUrl ? (
-                  <img src={sheet.basic.imageUrl} alt="캐릭터 초상" />
+                  <img src={sheet.basic.imageUrl} alt="캐릭터 초상" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="portrait-placeholder">
                     <UserRound size={42} />
@@ -2252,7 +2256,16 @@ function InsaneSheetView({
     }));
   }
 
-  function updateItem(key: 'painkiller' | 'weapon' | 'charm', value: number) {
+  function updateItem(
+    key:
+      | 'painkiller'
+      | 'weapon'
+      | 'charm'
+      | 'scpNetLauncher'
+      | 'scpMemoryErase'
+      | 'scpDetonator',
+    value: number,
+  ) {
     setSheet((current) => ({
       ...current,
       items: {
@@ -2262,59 +2275,35 @@ function InsaneSheetView({
     }));
   }
 
-  function addScpAbility() {
+  function updateScpEnabled(value: boolean) {
     setSheet((current) => ({
       ...current,
       items: {
         ...current.items,
-        scpAbilities: [
-          ...current.items.scpAbilities,
-          {
-            id: createId('scp-ability'),
-            name: '',
-            effect: '',
-          },
-        ],
-      },
-    }));
-  }
-
-  function updateScpAbility(id: string, key: keyof InsaneScpAbility, value: string) {
-    setSheet((current) => ({
-      ...current,
-      items: {
-        ...current.items,
-        scpAbilities: current.items.scpAbilities.map((ability) =>
-          ability.id === id ? { ...ability, [key]: value } : ability,
-        ),
-      },
-    }));
-  }
-
-  function removeScpAbility(id: string) {
-    setSheet((current) => ({
-      ...current,
-      items: {
-        ...current.items,
-        scpAbilities: current.items.scpAbilities.filter((ability) => ability.id !== id),
+        scpEnabled: value,
       },
     }));
   }
 
   function addAbility() {
-    setSheet((current) => ({
-      ...current,
-      abilities: [
-        ...current.abilities,
-        {
-          id: createId('ability'),
-          name: '',
-          type: '서포트',
-          specialty: '',
-          effect: '',
-        },
-      ],
-    }));
+    setSheet((current) => {
+      const canAddAbility = current.abilities.length < insaneAbilityLimit;
+      if (!canAddAbility) return current;
+
+      return {
+        ...current,
+        abilities: [
+          ...current.abilities,
+          {
+            id: createId('ability'),
+            name: '',
+            type: '서포트',
+            specialty: '',
+            effect: '',
+          },
+        ],
+      };
+    });
   }
 
   function updateAbilityName(id: string, value: string) {
@@ -2379,6 +2368,8 @@ function InsaneSheetView({
 
   const sanityPenalty = calculateInsaneSanityPenalty(sheet);
   const effectiveSanity = calculateInsaneEffectiveSanity(sheet);
+  const effectiveSanityMax = calculateInsaneEffectiveSanityMax(sheet);
+  const canAddAbility = sheet.abilities.length < insaneAbilityLimit;
   const insanePortraitItems = [
     ...(sheet.basic.imageUrl.trim()
       ? [{ imageUrl: sheet.basic.imageUrl.trim(), label: '대표', alt: '봉마인 대표 이미지' }]
@@ -2408,7 +2399,7 @@ function InsaneSheetView({
               <div className="insane-portrait-strip" aria-label="등록된 포트레이트">
                 {insanePortraitItems.map((item, index) => (
                   <figure className="insane-portrait-frame" key={`${item.label}-${item.imageUrl}-${index}`}>
-                    <img src={item.imageUrl} alt={item.alt} />
+                    <img src={item.imageUrl} alt={item.alt} referrerPolicy="no-referrer" />
                     <figcaption>{item.label}</figcaption>
                   </figure>
                 ))}
@@ -2509,10 +2500,10 @@ function InsaneSheetView({
           <VitalField
             label="이성치"
             current={effectiveSanity}
-            max={sheet.vitals.sanity.max}
+            max={effectiveSanityMax}
             note={sanityPenalty > 0 ? `괴이 특기 -${sanityPenalty}` : undefined}
             onCurrentChange={(value) => updateVital('sanity', 'current', value + sanityPenalty)}
-            onMaxChange={(value) => updateVital('sanity', 'max', value)}
+            onMaxChange={(value) => updateVital('sanity', 'max', value + sanityPenalty)}
             checks={[
               {
                 label: '착란',
@@ -2554,17 +2545,36 @@ function InsaneSheetView({
           </label>
           <label>
             <span>공포심</span>
-            <select
-              value={sheet.fear}
-              onChange={(event) => setSheet((current) => ({ ...current, fear: event.target.value }))}
-            >
-              <option value="">선택</option>
-              {insaneSpecialtyNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            <div className="insane-fear-controls">
+              <select
+                value=""
+                aria-label="공포심 추가"
+                onChange={(event) =>
+                  setSheet((current) => ({
+                    ...current,
+                    fear: appendInsaneFear(current.fear, event.target.value),
+                  }))
+                }
+              >
+                <option value="">선택</option>
+                {insaneSpecialtyNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={sheet.fear}
+                aria-label="공포심 직접 입력"
+                placeholder="소각,고문"
+                onChange={(event) =>
+                  setSheet((current) => ({ ...current, fear: event.target.value }))
+                }
+                onBlur={() =>
+                  setSheet((current) => ({ ...current, fear: appendInsaneFear(current.fear, '') }))
+                }
+              />
+            </div>
           </label>
           <button type="button" className="insane-roll-button" onClick={rollRandomInsaneSetup}>
             <Dice6 size={16} /> 랜덤 다이스
@@ -2591,7 +2601,7 @@ function InsaneSheetView({
                     const name = category.skills[rowIndex];
                     const specialty = sheet.skills[name];
                     const hasCuriosityGap = category.name === sheet.curiosity;
-                    const hasFearMark = name === sheet.fear;
+                    const hasFearMark = getInsaneFearNames(sheet.fear).includes(name);
                     const target = calculateInsaneSpecialtyTarget(sheet, name);
                     const cellClassName = [
                       hasCuriosityGap ? 'curiosity-gap-column' : '',
@@ -2639,59 +2649,21 @@ function InsaneSheetView({
           <NumberField label="무기" value={sheet.items.weapon} onChange={(value) => updateItem('weapon', value)} />
           <NumberField label="부적" value={sheet.items.charm} onChange={(value) => updateItem('charm', value)} />
         </div>
-        {/* SCP 능력치
-        <div className="combat-pane">
-          <div className="combat-pane-toolbar">
-            <strong>SCP 능력치</strong>
-            <button type="button" onClick={addScpAbility}>
-              <Plus size={16} /> SCP 추가
-            </button>
+        <label className="insane-scp-toggle">
+          <input
+            type="checkbox"
+            checked={sheet.items.scpEnabled}
+            onChange={(event) => updateScpEnabled(event.target.checked)}
+          />
+          SCP
+        </label>
+        {sheet.items.scpEnabled && (
+          <div className="insane-scp-items-grid">
+            <NumberField label="네트런처" value={sheet.items.scpNetLauncher} onChange={(value) => updateItem('scpNetLauncher', value)} />
+            <NumberField label="기억소거" value={sheet.items.scpMemoryErase} onChange={(value) => updateItem('scpMemoryErase', value)} />
+            <NumberField label="기폭장치" value={sheet.items.scpDetonator} onChange={(value) => updateItem('scpDetonator', value)} />
           </div>
-          {sheet.items.scpAbilities.length === 0 ? (
-            <p className="empty-line">등록된 SCP 능력치가 없습니다.</p>
-          ) : (
-            <div className="table-wrap">
-              <table className="insane-scp-table">
-                <thead>
-                  <tr>
-                    <th>이름</th>
-                    <th>효과</th>
-                    <th aria-label="삭제" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {sheet.items.scpAbilities.map((ability) => (
-                    <tr key={ability.id}>
-                      <td>
-                        <input
-                          value={ability.name}
-                          onChange={(event) => updateScpAbility(ability.id, 'name', event.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <textarea
-                          value={ability.effect}
-                          onChange={(event) => updateScpAbility(ability.id, 'effect', event.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="icon-only danger"
-                          onClick={() => removeScpAbility(ability.id)}
-                          title="SCP 능력치 삭제"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-        */}
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -2699,7 +2671,16 @@ function InsaneSheetView({
         className="wide-panel"
         icon={<Shield size={20} />}
         title="어빌리티"
-        action={<button type="button" onClick={addAbility}><Plus size={16} /> 어빌리티 추가</button>}
+        action={
+          <button
+            type="button"
+            onClick={addAbility}
+            disabled={!canAddAbility}
+            title={canAddAbility ? '어빌리티 추가' : '어빌리티는 8개까지 추가할 수 있습니다'}
+          >
+            <Plus size={16} /> 어빌리티 추가
+          </button>
+        }
         isOpen={sectionOpen.combat}
         onToggle={onToggle}
       >

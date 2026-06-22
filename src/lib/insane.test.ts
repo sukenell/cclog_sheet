@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   buildInsaneChatPalette,
   buildInsaneCcfoliaCharacter,
+  appendInsaneFear,
+  canAddInsaneAbility,
   calculateInsaneEffectiveSanity,
+  calculateInsaneEffectiveSanityMax,
   calculateInsaneSanityPenalty,
   calculateInsaneSpecialtyTarget,
   createInitialInsaneSheet,
   getInsanePaletteCopyError,
+  getInsaneFearNames,
+  insaneAbilityLimit,
   insaneSkillCategories,
   insanePaletteRequiredMessage,
   isDefaultInsaneAbility,
@@ -45,11 +50,10 @@ describe('inSANe sheet model', () => {
     expect(sheet.items.painkiller).toBe(0);
     expect(sheet.items.weapon).toBe(0);
     expect(sheet.items.charm).toBe(0);
-    expect(sheet.items.scpAbilities.map((item) => item.name)).toEqual([
-      '네트런처',
-      '기억소거',
-      '기폭장치',
-    ]);
+    expect(sheet.items.scpEnabled).toBe(false);
+    expect(sheet.items.scpNetLauncher).toBe(0);
+    expect(sheet.items.scpMemoryErase).toBe(0);
+    expect(sheet.items.scpDetonator).toBe(0);
     expect(sheet.abilities.map((ability) => ability.name)).toEqual(['기본공격', '전장이동']);
   });
 
@@ -97,6 +101,23 @@ describe('inSANe sheet model', () => {
     ]);
   });
 
+  it('keeps fixed numeric SCP item values in normalized InSane sheets', () => {
+    const sheet = normalizeInsaneSheet({
+      items: {
+        scpEnabled: true,
+        scpNetLauncher: 2,
+        scpMemoryErase: 3,
+        scpDetonator: 4,
+      },
+    });
+
+    expect(sheet.items.scpEnabled).toBe(true);
+    expect(sheet.items.scpNetLauncher).toBe(2);
+    expect(sheet.items.scpMemoryErase).toBe(3);
+    expect(sheet.items.scpDetonator).toBe(4);
+    expect(normalizeInsaneSheet({ items: { scpEnabled: false } }).items.scpEnabled).toBe(false);
+  });
+
   it('copies InSane labeled standing images as CCFOLIA faces', () => {
     const sheet = createInitialInsaneSheet();
 
@@ -135,26 +156,38 @@ describe('inSANe sheet model', () => {
     expect(getInsanePaletteCopyError(sheet)).toBeNull();
   });
 
-  it('calculates specialty targets from checked specialties, curiosity, and fear', () => {
+  it('calculates specialty targets from checked specialties and curiosity gap formulas', () => {
     const sheet = createInitialInsaneSheet();
     sheet.curiosity = '1. 폭력';
-    sheet.fear = '소각';
+    sheet.fear = '소각, 고문';
     sheet.skills.소각.checked = true;
 
-    expect(calculateInsaneSpecialtyTarget(sheet, '소각')).toBe(6);
-    expect(calculateInsaneSpecialtyTarget(sheet, '고문')).toBe(5);
-    expect(calculateInsaneSpecialtyTarget(sheet, '포박')).toBe(6);
-    expect(calculateInsaneSpecialtyTarget(sheet, '매장')).toBe(11);
+    expect(getInsaneFearNames(sheet.fear)).toEqual(['소각', '고문']);
+    expect(calculateInsaneSpecialtyTarget(sheet, '소각')).toBe(5);
+    expect(calculateInsaneSpecialtyTarget(sheet, '고문')).toBe(6);
+    expect(calculateInsaneSpecialtyTarget(sheet, '포박')).toBe(7);
+    expect(calculateInsaneSpecialtyTarget(sheet, '매장')).toBe(12);
     expect(calculateInsaneSpecialtyTarget(sheet, '연심')).toBe(6);
+    expect(calculateInsaneSpecialtyTarget(sheet, '고통')).toBe(8);
+    expect(calculateInsaneSpecialtyTarget(sheet, '분해')).toBe(10);
   });
 
-  it('never lowers a specialty target below five after penalties stack', () => {
+  it('appends selected fear specialties as a trimmed comma-separated list', () => {
+    expect(appendInsaneFear(' 소각, 민속학 ', '우주')).toBe('소각,민속학,우주');
+    expect(appendInsaneFear('소각,민속학', '소각')).toBe('소각,민속학');
+    expect(appendInsaneFear('', '')).toBe('');
+  });
+
+  it('uses the selected curiosity column as the one-point gap in the source sheet formula', () => {
     const sheet = createInitialInsaneSheet();
-    sheet.curiosity = '1. 폭력';
+    sheet.curiosity = '4. 기술';
     sheet.skills.소각.checked = true;
 
     expect(calculateInsaneSpecialtyTarget(sheet, '소각')).toBe(5);
-    expect(calculateInsaneSpecialtyTarget(sheet, '고문')).toBe(5);
+    expect(calculateInsaneSpecialtyTarget(sheet, '연심')).toBe(7);
+    expect(calculateInsaneSpecialtyTarget(sheet, '고통')).toBe(9);
+    expect(calculateInsaneSpecialtyTarget(sheet, '분해')).toBe(10);
+    expect(calculateInsaneSpecialtyTarget(sheet, '물리학')).toBe(11);
   });
 
   it('subtracts checked mystery specialties from sanity with a six point cap', () => {
@@ -164,6 +197,7 @@ describe('inSANe sheet model', () => {
 
     expect(calculateInsaneSanityPenalty(sheet)).toBe(0);
     expect(calculateInsaneEffectiveSanity(sheet)).toBe(6);
+    expect(calculateInsaneEffectiveSanityMax(sheet)).toBe(6);
 
     mysterySkills.slice(0, 8).forEach((name) => {
       sheet.skills[name].checked = true;
@@ -172,10 +206,30 @@ describe('inSANe sheet model', () => {
 
     expect(calculateInsaneSanityPenalty(sheet)).toBe(6);
     expect(calculateInsaneEffectiveSanity(sheet)).toBe(0);
+    expect(calculateInsaneEffectiveSanityMax(sheet)).toBe(0);
 
     sheet.vitals.sanity.current = 10;
+    sheet.vitals.sanity.max = 12;
 
     expect(calculateInsaneEffectiveSanity(sheet)).toBe(4);
+    expect(calculateInsaneEffectiveSanityMax(sheet)).toBe(6);
+  });
+
+  it('allows up to eight InSane abilities in total', () => {
+    const sheet = createInitialInsaneSheet();
+
+    expect(insaneAbilityLimit).toBe(8);
+    expect(canAddInsaneAbility(sheet)).toBe(true);
+
+    sheet.abilities = Array.from({ length: insaneAbilityLimit }, (_, index) => ({
+      id: `ability-${index + 1}`,
+      name: `어빌리티 ${index + 1}`,
+      type: '서포트',
+      specialty: '',
+      effect: '',
+    }));
+
+    expect(canAddInsaneAbility(sheet)).toBe(false);
   });
 
   it('recognizes the two fixed default abilities', () => {
@@ -231,8 +285,8 @@ describe('inSANe sheet model', () => {
       { label: '이성치', value: 6, max: 6 },
     ]);
     expect(data.params).toHaveLength(66);
-    expect(data.params.find((param) => param.label === '소각')?.value).toBe('6');
-    expect(data.params.find((param) => param.label === '매장')?.value).toBe('11');
+    expect(data.params.find((param) => param.label === '소각')?.value).toBe('5');
+    expect(data.params.find((param) => param.label === '매장')?.value).toBe('12');
     expect(data.color).toBe('#68c870');
     expect(data.commands).toContain('2D6>={소각}');
   });
@@ -245,6 +299,7 @@ describe('inSANe sheet model', () => {
     const payload = buildInsaneCcfoliaCharacter(sheet);
 
     expect(payload.data.status.find((status) => status.label === '이성치')?.value).toBe(4);
+    expect(payload.data.status.find((status) => status.label === '이성치')?.max).toBe(4);
   });
 
   it('randomly chooses curiosity, fear, and six checked specialties', () => {

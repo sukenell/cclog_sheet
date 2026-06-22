@@ -35,12 +35,6 @@ export interface InsaneSession {
   note: string;
 }
 
-export interface InsaneScpAbility {
-  id: string;
-  name: string;
-  effect: string;
-}
-
 export interface InsaneStandingImage {
   label: string;
   imageUrl: string;
@@ -103,7 +97,10 @@ export interface InsaneSheetState {
     painkiller: number;
     weapon: number;
     charm: number;
-    scpAbilities: InsaneScpAbility[];
+    scpEnabled: boolean;
+    scpNetLauncher: number;
+    scpMemoryErase: number;
+    scpDetonator: number;
   };
   abilities: InsaneAbility[];
   sessions: InsaneSession[];
@@ -145,8 +142,8 @@ export const insaneSkillCategories: InsaneSkillCategory[] = [
 
 export const insaneSpecialtyNames = insaneSkillCategories.flatMap((category) => category.skills);
 export const insanePaletteRequiredMessage = '내용을 작성한 뒤에 복사해주세요';
+export const insaneAbilityLimit = 8;
 
-const defaultScpAbilityNames = ['네트런처', '기억소거', '기폭장치'];
 const defaultInsaneAbilityIds = new Set(['ability-basic-attack', 'ability-battle-move']);
 const insaneSpecialtyPositions = new Map(
   insaneSkillCategories.flatMap((category, categoryIndex) =>
@@ -198,11 +195,10 @@ export function createInitialInsaneSheet(): InsaneSheetState {
       painkiller: 0,
       weapon: 0,
       charm: 0,
-      scpAbilities: defaultScpAbilityNames.map((name, index) => ({
-        id: `scp-ability-${index + 1}`,
-        name,
-        effect: '',
-      })),
+      scpEnabled: false,
+      scpNetLauncher: 0,
+      scpMemoryErase: 0,
+      scpDetonator: 0,
     },
     abilities: [
       {
@@ -276,9 +272,10 @@ export function normalizeInsaneSheet(value: unknown): InsaneSheetState {
           painkiller: nonNegativeNumber(value.items.painkiller, fallback.items.painkiller),
           weapon: nonNegativeNumber(value.items.weapon, fallback.items.weapon),
           charm: nonNegativeNumber(value.items.charm, fallback.items.charm),
-          scpAbilities: Array.isArray(value.items.scpAbilities)
-            ? value.items.scpAbilities.map(normalizeScpAbility)
-            : fallback.items.scpAbilities,
+          scpEnabled: Boolean(value.items.scpEnabled),
+          scpNetLauncher: nonNegativeNumber(value.items.scpNetLauncher, fallback.items.scpNetLauncher),
+          scpMemoryErase: nonNegativeNumber(value.items.scpMemoryErase, fallback.items.scpMemoryErase),
+          scpDetonator: nonNegativeNumber(value.items.scpDetonator, fallback.items.scpDetonator),
         }
       : fallback.items,
     abilities: Array.isArray(value.abilities) ? value.abilities.map(normalizeAbility) : fallback.abilities,
@@ -299,7 +296,7 @@ export function buildInsaneChatPalette(sheet: InsaneSheetState): string {
 
   return [
     `『• • • ✎ 호기심: ${sheet.curiosity} • • •』`,
-    `✥﹤┈┈ 공포심: ${sheet.fear} ┈┈﹥✥`,
+    `✥﹤┈┈ 공포심: ${formatInsaneFear(sheet.fear)} ┈┈﹥✥`,
     '',
     '▁ ▂ ▃ ▄ ▅ ▆ ▇ ▌　Ability 목록　 ▌ ▇ ▆ ▅ ▄ ▃ ▂ ▁',
     ...abilityLines,
@@ -318,7 +315,11 @@ export function buildInsaneCcfoliaCharacter(sheet: InsaneSheetState): InsaneCcfo
       faces: normalizeInsaneCcfoliaFaces(sheet.basic.standingImages),
       status: [
         { label: '생명력', value: sheet.vitals.life.current, max: sheet.vitals.life.max },
-        { label: '이성치', value: calculateInsaneEffectiveSanity(sheet), max: sheet.vitals.sanity.max },
+        {
+          label: '이성치',
+          value: calculateInsaneEffectiveSanity(sheet),
+          max: calculateInsaneEffectiveSanityMax(sheet),
+        },
       ],
       params: insaneSpecialtyNames.map((name) => ({
         label: name,
@@ -375,6 +376,7 @@ export function calculateInsaneSpecialtyTarget(
 ): number {
   const position = insaneSpecialtyPositions.get(name);
   if (!position) return 12;
+  const curiosityPosition = insaneSkillCategories.findIndex((category) => category.name === sheet.curiosity);
 
   const checkedPositions = insaneSpecialtyNames
     .filter((specialtyName) => sheet.skills[specialtyName]?.checked)
@@ -392,15 +394,36 @@ export function calculateInsaneSpecialtyTarget(
             Math.min(
               ...checkedPositions.map(
                 (checkedPosition) =>
-                  Math.abs(checkedPosition.categoryIndex - position.categoryIndex) +
+                  calculateInsaneCategoryDistance(
+                    checkedPosition.categoryIndex,
+                    position.categoryIndex,
+                    curiosityPosition,
+                  ) +
                   Math.abs(checkedPosition.rowIndex - position.rowIndex),
               ),
             ),
         );
-  const curiosityModifier = position.categoryName === sheet.curiosity ? -1 : 0;
-  const fearModifier = name === sheet.fear ? 2 : 0;
 
-  return Math.min(12, Math.max(5, baseTarget + curiosityModifier + fearModifier));
+  return Math.min(12, Math.max(5, baseTarget));
+}
+
+function calculateInsaneCategoryDistance(
+  fromCategoryIndex: number,
+  toCategoryIndex: number,
+  curiosityCategoryIndex: number,
+): number {
+  const start = Math.min(fromCategoryIndex, toCategoryIndex);
+  const end = Math.max(fromCategoryIndex, toCategoryIndex);
+  let distance = 0;
+
+  for (let boundaryIndex = start; boundaryIndex < end; boundaryIndex += 1) {
+    distance +=
+      boundaryIndex === curiosityCategoryIndex || boundaryIndex === curiosityCategoryIndex - 1
+        ? 1
+        : 2;
+  }
+
+  return distance;
 }
 
 export function calculateInsaneSanityPenalty(sheet: InsaneSheetState): number {
@@ -413,6 +436,33 @@ export function calculateInsaneSanityPenalty(sheet: InsaneSheetState): number {
 
 export function calculateInsaneEffectiveSanity(sheet: InsaneSheetState): number {
   return Math.max(0, sheet.vitals.sanity.current - calculateInsaneSanityPenalty(sheet));
+}
+
+export function calculateInsaneEffectiveSanityMax(sheet: InsaneSheetState): number {
+  return Math.max(0, sheet.vitals.sanity.max - calculateInsaneSanityPenalty(sheet));
+}
+
+export function getInsaneFearNames(value: string): string[] {
+  const names: string[] = [];
+
+  value.split(',').forEach((part) => {
+    const name = part.trim();
+    if (!name || names.includes(name)) return;
+    names.push(name);
+  });
+
+  return names;
+}
+
+export function appendInsaneFear(currentValue: string, selectedValue: string): string {
+  const selected = selectedValue.trim();
+  const values = selected ? [...getInsaneFearNames(currentValue), selected] : getInsaneFearNames(currentValue);
+
+  return formatInsaneFear(values.join(','));
+}
+
+export function canAddInsaneAbility(sheet: InsaneSheetState): boolean {
+  return sheet.abilities.length < insaneAbilityLimit;
 }
 
 export function isDefaultInsaneAbility(ability: InsaneAbility): boolean {
@@ -441,7 +491,7 @@ function pickMany<T>(values: T[], count: number, rng: () => number): T[] {
 export function getInsanePaletteCopyError(sheet: InsaneSheetState): string | null {
   const hasCheckedSpecialty = Object.values(sheet.skills).some((specialty) => specialty.checked);
 
-  if (!hasCheckedSpecialty || !sheet.curiosity.trim() || !sheet.fear.trim()) {
+  if (!hasCheckedSpecialty || !sheet.curiosity.trim() || getInsaneFearNames(sheet.fear).length === 0) {
     return insanePaletteRequiredMessage;
   }
 
@@ -466,16 +516,6 @@ function normalizeSpecialties(
       ];
     }),
   );
-}
-
-function normalizeScpAbility(value: unknown, index: number): InsaneScpAbility {
-  const record = isRecord(value) ? value : {};
-
-  return {
-    id: stringValue(record.id) || `scp-ability-${index + 1}`,
-    name: stringValue(record.name),
-    effect: stringValue(record.effect),
-  };
 }
 
 function normalizeRelationship(value: unknown, index: number): InsaneRelationship {
@@ -526,6 +566,10 @@ function stringValue(value: unknown): string {
 
 function stringArrayValue(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function formatInsaneFear(value: string): string {
+  return getInsaneFearNames(value).join(',');
 }
 
 function normalizeInsaneStandingImages(
