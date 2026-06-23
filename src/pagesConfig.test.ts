@@ -9,6 +9,23 @@ describe('vite GitHub Pages config', () => {
     expect(source).toContain("base: '/cclog_sheet/'");
   });
 
+  it('keeps InSane out of the default production bundle while allowing dev builds to opt in', () => {
+    const config = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+    const insaneStub = readFileSync(resolve(process.cwd(), 'src/lib/insane.production.ts'), 'utf8');
+    const insaneAbilityStub = readFileSync(
+      resolve(process.cwd(), 'src/lib/insaneAbilities.production.ts'),
+      'utf8',
+    );
+
+    expect(config).toContain("command === 'serve' || process.env.VITE_ENABLE_INSANE === 'true'");
+    expect(config).toContain('insane.production.ts');
+    expect(config).toContain('insaneAbilities.production.ts');
+    expect(insaneStub).toContain('export const insaneSkillCategories: InsaneSkillCategory[] = [];');
+    expect(insaneStub).toContain('export const insaneSpecialtyNames: string[] = [];');
+    expect(insaneStub).toContain('abilities: []');
+    expect(insaneAbilityStub).toContain('return setInsaneAbilityPresets();');
+  });
+
   it('prepares a static help route for GitHub Pages direct links', () => {
     const packageJson = readFileSync(resolve(process.cwd(), 'package.json'), 'utf8');
     const script = readFileSync(resolve(process.cwd(), 'scripts/prepare-pages.mjs'), 'utf8');

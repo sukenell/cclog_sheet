@@ -19,7 +19,7 @@ describe('topbar archive controls', () => {
     ).toBe(false);
   });
 
-  it('switches to the archive system before importing JSON data', () => {
+  it('switches to the available archive system before importing JSON data', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const importStart = source.indexOf('function importJson');
     const copyStart = source.indexOf('async function copyCharacterToClipboard', importStart);
@@ -28,13 +28,13 @@ describe('topbar archive controls', () => {
     expect(source).toContain('detectSheetArchiveSystem');
     expect(importBlock).toContain('const parsedArchive = parseSheetArchive<unknown>(String(reader.result));');
     expect(importBlock).toContain('const importedSystem = detectSheetArchiveSystem(parsedArchive);');
-    expect(importBlock).toContain("const targetSystem = importedSystem === 'unknown' ? gameSystem : importedSystem;");
+    expect(importBlock).toContain('const targetSystem = resolveAvailableGameSystem(importedSystem, gameSystem);');
     expect(importBlock).toContain('setGameSystem(targetSystem);');
     expect(importBlock).toContain("if (targetSystem === 'insan')");
     expect(importBlock).not.toContain("if (gameSystem === 'insan')");
   });
 
-  it('offers updated sheet system labels while keeping the COC 6th edition option commented out', () => {
+  it('offers InSane only behind the development build gate while keeping the COC 6th edition option commented out', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const jsxCommentBlocks = [...source.matchAll(/\{\/\*[\s\S]*?\*\/\}/g)].map(
       ([block]) => block,
@@ -46,20 +46,39 @@ describe('topbar archive controls', () => {
 
     expect(source).toContain('className="game-system-select"');
     expect(source).toContain("type GameSystem = 'coc7' | 'coc6' | 'insan';");
+    expect(source).toContain("const isInsaneEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_INSANE === 'true';");
     expect(visibleSystemSelectBlock).toContain('7판 시트');
-    expect(visibleSystemSelectBlock).toContain('InSane 시트');
+    expect(visibleSystemSelectBlock).toContain('{isInsaneEnabled && <option value="insan">InSane 시트</option>}');
     expect(visibleSystemSelectBlock).not.toContain('COC 6판');
     expect(
       jsxCommentBlocks.some(
         (block) => block.includes('value="coc6"') && block.includes('COC 6판'),
       ),
     ).toBe(true);
-    expect(source).toContain('value="insan"');
     expect(source).toContain('handleGameSystemChange');
     expect(source).toContain('convertCocSheetEdition');
     expect(source).toContain('<strong>CCLog Sheet</strong>');
     expect(source).toContain('className="brand-title-row"');
     expect(source).not.toContain('<span>{systemLabel}</span>');
+  });
+
+  it('falls back to COC 7 when InSane is unavailable in a production build', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const loadGameSystemStart = source.indexOf('function loadGameSystem');
+    const loadInsaneSheetStart = source.indexOf('function loadInsaneSheet', loadGameSystemStart);
+    const loadGameSystemBlock = source.slice(loadGameSystemStart, loadInsaneSheetStart);
+    const resolveStart = source.indexOf('function resolveAvailableGameSystem');
+    const resolveEnd = source.indexOf('function getCocEdition', resolveStart);
+    const resolveBlock = source.slice(resolveStart, resolveEnd);
+    const changeStart = source.indexOf('function handleGameSystemChange');
+    const openInsaneStart = source.indexOf('function openInsaneSheetWithAbilityLock', changeStart);
+    const changeBlock = source.slice(changeStart, openInsaneStart);
+
+    expect(loadGameSystemBlock).toContain("return resolveAvailableGameSystem(saved, 'coc7');");
+    expect(resolveBlock).toContain("if ((system === 'insan' || system === 'insane') && isInsaneEnabled) return 'insan';");
+    expect(resolveBlock).toContain("if (system === 'coc6') return 'coc6';");
+    expect(resolveBlock).toContain('return fallback === \'insan\' && !isInsaneEnabled ? \'coc7\' : fallback;');
+    expect(changeBlock).toContain("if (nextSystem === 'insan' && !isInsaneEnabled) return;");
   });
 
   it('opens a usage guide page from the CCLog Sheet brand help icon', () => {
@@ -103,6 +122,7 @@ describe('topbar archive controls', () => {
     expect(source).toContain('const usageGuideSections = [');
     expect(source).toContain('title: \'1. 시트 작성하기\'');
     expect(source).toContain('title: \'3.비밀 주사위 복사\'');
+    expect(source).toContain('...(isInsaneEnabled');
     expect(source).toContain('description:');
     expect(source).toContain('type UsageGuideImages =');
     expect(source).toContain('images: [');
@@ -323,7 +343,7 @@ describe('topbar archive controls', () => {
 
   it('uses a shared session card section for CoC and InSane', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
-    const cocNavStart = source.indexOf("{gameSystem === 'insan' ?");
+    const cocNavStart = source.indexOf('{isInsaneMode ?');
     const cocBranchStart = source.indexOf(') : (', cocNavStart);
     const cocBranchEnd = source.indexOf('</nav>', cocBranchStart);
     const cocNav = source.slice(cocBranchStart, cocBranchEnd);

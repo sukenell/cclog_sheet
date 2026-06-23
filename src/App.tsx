@@ -162,14 +162,13 @@ type SheetStateArchive = Partial<Omit<SheetState, 'weapons' | 'armors' | 'spells
 
 type CombatTab = 'weapons' | 'armor' | 'spells';
 type GameSystem = 'coc7' | 'coc6' | 'insan';
-
 const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
 const insaneStorageKey = 'cclog-sheet:insane:v1';
 const colorPickerFallback = '#68c870';
+const isInsaneEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_INSANE === 'true';
 const insaneAbilityPresetPassword =
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
-    ?.VITE_INSANE_ABILITY_PASSWORD ?? '').trim();
+  (import.meta.env.VITE_INSANE_ABILITY_PASSWORD ?? '').trim();
 const statOrder: StatKey[] = ['STR', 'DEX', 'POW', 'CON', 'APP', 'EDU', 'SIZ', 'INT'];
 const coc6OccupationFormulaLabels: Record<OccupationFormula, string> = {
   edu4: 'EDU x 20',
@@ -194,7 +193,7 @@ const backstoryFields = [
   ['tomes', '신화서&유물 / 기이한 존재들과의 만남'],
 ];
 const appBasePath = normalizeAppBasePath(
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.BASE_URL ?? '/'),
+  import.meta.env.BASE_URL ?? '/',
 );
 const helpPath = createAppPath(appBasePath, 'usage');
 const sheetPath = createAppPath(appBasePath, 'sheet');
@@ -219,8 +218,7 @@ type UsageGuideSection = {
 const usageGuideSections = [
   {
     title: '1. 시트 작성하기',
-    description:
-      '시트 타입을 고르고, 특성치와 기능치 등의 입력 내용을 손쉽게 계산할 수 있습니다. 현재 지원하는 룰은 COC 7판과 InSane입니다.',
+    description: `시트 타입을 고르고, 특성치와 기능치 등의 입력 내용을 손쉽게 계산할 수 있습니다. 현재 지원하는 룰은 COC 7판${isInsaneEnabled ? '과 InSane' : ''}입니다.`,
     images: [
       {
         src: `${appBasePath}/usage-guide/usage-guide-basic-flow.svg`,
@@ -258,17 +256,21 @@ const usageGuideSections = [
       },
     ],
   },
-  {
-    title: '4.어빌리티 자동화(인세인)',
-    description:
-      'InSane 어빌리티는 룰북내 비밀번호를 입력하면, 자동 불러오기 기능이 활성화 됩니다.',
-    images: [
-      {
-        src: `${appBasePath}/usage-guide/usage-guide-faq.svg`,
-        alt: '팔레트 복사와 잠금 안내',
-      },
-    ],
-  },
+  ...(isInsaneEnabled
+    ? [
+        {
+          title: '4.어빌리티 자동화(인세인)',
+          description:
+            'InSane 어빌리티는 룰북내 비밀번호를 입력하면, 자동 불러오기 기능이 활성화 됩니다.',
+          images: [
+            {
+              src: `${appBasePath}/usage-guide/usage-guide-faq.svg`,
+              alt: '팔레트 복사와 잠금 안내',
+            },
+          ],
+        } satisfies UsageGuideSection,
+      ]
+    : []),
 ] satisfies UsageGuideSection[];
 
 function createId(prefix: string): string {
@@ -305,7 +307,9 @@ function App() {
   const [activePage, setActivePage] = useState<AppPage>(() => getAppPageFromPath(window.location.pathname, appBasePath));
   const [gameSystem, setGameSystem] = useState<GameSystem>(() => loadGameSystem());
   const [sheet, setSheet] = useState<SheetState>(() => loadSheet());
-  const [insaneSheet, setInsaneSheet] = useState<InsaneSheetState>(() => loadInsaneSheet());
+  const [insaneSheet, setInsaneSheet] = useState<InsaneSheetState | null>(() =>
+    isInsaneEnabled ? loadInsaneSheet() : null,
+  );
   const [skillSearch, setSkillSearch] = useState('');
   const [skillCategory, setSkillCategory] = useState('전체');
   const [growthMessage, setGrowthMessage] = useState('');
@@ -329,8 +333,9 @@ function App() {
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  const isInsaneMode = isInsaneEnabled && gameSystem === 'insan' && insaneSheet !== null;
   const cocEdition = getCocEdition(gameSystem);
-  const isAbilityPresetImportLocked = gameSystem === 'insan' && !isInsaneAbilityPresetUnlocked;
+  const isAbilityPresetImportLocked = isInsaneMode && !isInsaneAbilityPresetUnlocked;
   const derived = useMemo(
     () => calculateDerivedStats(sheet.stats, cocEdition),
     [cocEdition, sheet.stats],
@@ -401,6 +406,7 @@ function App() {
   }, [sheet]);
 
   useEffect(() => {
+    if (!isInsaneEnabled || !insaneSheet) return;
     window.localStorage.setItem(insaneStorageKey, JSON.stringify(insaneSheet));
   }, [insaneSheet]);
 
@@ -410,6 +416,7 @@ function App() {
 
   useEffect(() => {
     let isMounted = true;
+    if (!isInsaneEnabled) return undefined;
 
     void loadInsaneAbilityPresets().then((presets) => {
       if (isMounted) {
@@ -535,27 +542,33 @@ function App() {
   }
 
   function handleGameSystemChange(nextSystem: GameSystem) {
-    if (nextSystem === gameSystem) return;
+    if (nextSystem === 'insan' && !isInsaneEnabled) return;
+    const availableNextSystem = resolveAvailableGameSystem(nextSystem, gameSystem);
 
-    if (nextSystem === 'insan' && !isInsaneAbilityPresetUnlocked) {
+    if (availableNextSystem === gameSystem) return;
+
+    if (availableNextSystem === 'insan' && !isInsaneAbilityPresetUnlocked) {
+      setInsaneSheet((current) => current ?? loadInsaneSheet());
       setInsaneAbilityPasswordDraft('');
       setIsInsaneAbilityPasswordDialogOpen(true);
       return;
     }
 
-    if (isCocGameSystem(gameSystem) && isCocGameSystem(nextSystem)) {
-      setSheet((current) => convertCocSheetEdition(current, gameSystem, nextSystem));
+    if (isCocGameSystem(gameSystem) && isCocGameSystem(availableNextSystem)) {
+      setSheet((current) => convertCocSheetEdition(current, gameSystem, availableNextSystem));
       setSkillCategory('전체');
     }
 
-    if (nextSystem !== 'insan') {
+    if (availableNextSystem !== 'insan') {
       setIsInsaneAbilityPresetUnlocked(false);
     }
 
-    setGameSystem(nextSystem);
+    setGameSystem(availableNextSystem);
   }
 
   function openInsaneSheetWithAbilityLock(isUnlocked: boolean) {
+    if (!isInsaneEnabled) return;
+    setInsaneSheet((current) => current ?? loadInsaneSheet());
     setIsInsaneAbilityPresetUnlocked(isUnlocked);
     setInsaneAbilityPasswordDraft('');
     setIsInsaneAbilityPasswordDialogOpen(false);
@@ -813,15 +826,15 @@ function App() {
   }
 
   function exportJson() {
-    if (gameSystem !== 'insan') {
-      setIsCocExportDialogOpen(true);
+    if (isInsaneMode && insaneSheet) {
+      downloadJsonArchive(
+        { ...insaneSheet, gameSystem: 'insan' },
+        insaneSheet.basic.name || 'insan-character',
+      );
       return;
     }
 
-    downloadJsonArchive(
-      { ...insaneSheet, gameSystem: 'insan' },
-      insaneSheet.basic.name || 'insan-character',
-    );
+    setIsCocExportDialogOpen(true);
   }
 
   function exportCocJson(mode: CocExportMode) {
@@ -849,7 +862,7 @@ function App() {
       try {
         const parsedArchive = parseSheetArchive<unknown>(String(reader.result));
         const importedSystem = detectSheetArchiveSystem(parsedArchive);
-        const targetSystem = importedSystem === 'unknown' ? gameSystem : importedSystem;
+        const targetSystem = resolveAvailableGameSystem(importedSystem, gameSystem);
 
         setGameSystem(targetSystem);
 
@@ -868,7 +881,7 @@ function App() {
   }
 
   async function copyCharacterToClipboard() {
-    if (gameSystem === 'insan') {
+    if (isInsaneMode && insaneSheet) {
       const copyError = getInsanePaletteCopyError(insaneSheet);
       if (copyError) {
         setToolbarMessage(copyError);
@@ -924,7 +937,7 @@ function App() {
   }
 
   function resetSheet() {
-    if (gameSystem === 'insan') {
+    if (isInsaneMode) {
       setInsaneSheet(createInitialInsaneSheet());
       setToolbarMessage('');
       return;
@@ -937,18 +950,20 @@ function App() {
   }
 
   const topbarTitle =
-    gameSystem === 'insan'
+    isInsaneMode && insaneSheet
       ? insaneSheet.basic.name || '새로운 봉마인'
       : sheet.basic.name || '새로운 탐사자';
-  const insaneTopbarSanity = calculateInsaneEffectiveSanity(insaneSheet);
-  const insaneTopbarSanityMax = calculateInsaneEffectiveSanityMax(insaneSheet);
+  const insaneTopbarSanity =
+    isInsaneMode && insaneSheet ? calculateInsaneEffectiveSanity(insaneSheet) : 0;
+  const insaneTopbarSanityMax =
+    isInsaneMode && insaneSheet ? calculateInsaneEffectiveSanityMax(insaneSheet) : 0;
   const topbarSubtitle =
-    gameSystem === 'insan'
+    isInsaneMode && insaneSheet
       ? `${insaneSheet.basic.occupation || '직업 미정'} · 생명력 ${insaneSheet.vitals.life.current}/${insaneSheet.vitals.life.max} · 이성치 ${insaneTopbarSanity}/${insaneTopbarSanityMax}`
       : `${sheet.basic.occupation || '직업 미정'} · ${gameSystem === 'coc6' ? 'COC 6판' : 'COC 7판'} · SAN ${sanity.current}`;
   const pageTitle = activePage === 'usage' ? '사용방법' : topbarTitle;
   const pageSubtitle = activePage === 'usage' ? 'CCLog Sheet 안내' : topbarSubtitle;
-  const brandMark = gameSystem === 'insan' ? 'IN' : gameSystem === 'coc6' ? 'C6' : 'CC';
+  const brandMark = isInsaneMode ? 'IN' : gameSystem === 'coc6' ? 'C6' : 'CC';
   const activeOccupationFormulaLabels =
     cocEdition === 'coc6' ? coc6OccupationFormulaLabels : occupationFormulaLabels;
 
@@ -978,12 +993,12 @@ function App() {
             >
               <option value="coc7">COC 7판 시트</option>
               {/* <option value="coc6">COC 6판</option> */}
-              <option value="insan">InSane 시트</option>
+              {isInsaneEnabled && <option value="insan">InSane 시트</option>}
             </select>
           </div>
         </div>
         <nav>
-          {gameSystem === 'insan' ? (
+          {isInsaneMode ? (
             <>
               {renderSidebarLink('basic', <UserRound size={17} />, '봉마인정보')}
               {renderSidebarLink('insaneBasic2', <Sparkles size={17} />, '봉마인정보2')}
@@ -1112,7 +1127,7 @@ function App() {
           />
         )}
 
-        {isInsaneAbilityPasswordDialogOpen && (
+        {isInsaneEnabled && isInsaneAbilityPasswordDialogOpen && (
           <InsaneAbilityPasswordDialog
             value={insaneAbilityPasswordDraft}
             onChange={setInsaneAbilityPasswordDraft}
@@ -1125,10 +1140,10 @@ function App() {
           <UsageGuidePage />
         ) : (
         <div className="content-grid">
-          {gameSystem === 'insan' ? (
+          {isInsaneMode && insaneSheet ? (
             <InsaneSheetView
               sheet={insaneSheet}
-              setSheet={setInsaneSheet}
+              setSheet={setInsaneSheet as React.Dispatch<React.SetStateAction<InsaneSheetState>>}
               sectionOpen={sectionOpen}
               onToggle={toggleSection}
               abilityPresetImportLocked={isAbilityPresetImportLocked}
@@ -1998,10 +2013,7 @@ function loadSheet(): SheetState {
 function loadGameSystem(): GameSystem {
   try {
     const saved = window.localStorage.getItem(systemStorageKey);
-
-    if (saved === 'insan' || saved === 'insane') return 'insan';
-    if (saved === 'coc6') return 'coc6';
-    return 'coc7';
+    return resolveAvailableGameSystem(saved, 'coc7');
   } catch {
     return 'coc7';
   }
@@ -2015,6 +2027,13 @@ function loadInsaneSheet(): InsaneSheetState {
   } catch {
     return createInitialInsaneSheet();
   }
+}
+
+function resolveAvailableGameSystem(system: unknown, fallback: GameSystem): GameSystem {
+  if ((system === 'insan' || system === 'insane') && isInsaneEnabled) return 'insan';
+  if (system === 'coc6') return 'coc6';
+  if (system === 'coc7') return 'coc7';
+  return fallback === 'insan' && !isInsaneEnabled ? 'coc7' : fallback;
 }
 
 function normalizeSheetState(
