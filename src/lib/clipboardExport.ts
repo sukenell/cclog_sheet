@@ -8,6 +8,7 @@ import {
   type InvestigatorStats,
   type SheetSkill,
   type StatKey,
+  fourFifths,
 } from './character';
 import type { SanityInfo } from './sheet';
 
@@ -23,6 +24,11 @@ export interface ClipboardFace {
 
 export interface CharacterClipboardSource {
   name: string;
+  player?: string;
+  occupation?: string;
+  age?: string;
+  gender?: string;
+  birthplace?: string;
   stats: InvestigatorStats;
   sanity: SanityInfo;
   skills: SheetSkill[];
@@ -57,8 +63,8 @@ export interface SecretDiceRollOption {
 }
 
 interface Roll20Attribute {
-  current: number;
-  max: number | '';
+  current: number | string;
+  max: number | string;
 }
 
 interface SecretDiceImportPayload {
@@ -210,6 +216,49 @@ const roll20SkillAttributeNames: Record<string, string> = {
   track: 'track',
 };
 
+const roll20CocSheetSkillAttributeNames: Record<string, string> = {
+  accounting: 'accounting',
+  anthropology: 'anthropology',
+  appraise: 'appraise',
+  archaeology: 'archaeology',
+  charm: 'charm',
+  climb: 'climb',
+  'credit-rating': 'credit_rating',
+  'cthulhu-mythos': 'cthulhu_mythos',
+  disguise: 'disguise',
+  dodge: 'dodge',
+  'drive-auto': 'drive_auto',
+  'elec-repair': 'elec_repair',
+  'fast-talk': 'fast_talk',
+  'fighting-brawl': 'fighting_brawl',
+  'firearms-handgun': 'firearms_handgun',
+  'firearms-rifle': 'firearms_rifle',
+  'first-aid': 'first_aid',
+  history: 'history',
+  intimidate: 'intimidate',
+  jump: 'jump',
+  'language-own': 'language_own',
+  law: 'law',
+  'library-use': 'library_use',
+  listen: 'listen',
+  locksmith: 'locksmith',
+  'mechanical-repair': 'mech_repair',
+  medicine: 'medicine',
+  'natural-world': 'natural_world',
+  navigate: 'navigate',
+  occult: 'occult',
+  persuade: 'persuade',
+  psychoanalysis: 'psychoanalysis',
+  psychology: 'psychology',
+  ride: 'ride',
+  'sleight-of-hand': 'sleight_of_hand',
+  'spot-hidden': 'spot_hidden',
+  stealth: 'stealth',
+  swim: 'swim',
+  throw: 'throw',
+  track: 'track',
+};
+
 export function buildCharacterClipboardPayload(
   source: CharacterClipboardSource,
 ): CharacterClipboardPayload {
@@ -304,6 +353,16 @@ export function serializeSecretDiceImport(
   return ['[R20JE:COC7_IMPORT:1]', JSON.stringify(payload, null, 2), '[/R20JE]'].join('\n');
 }
 
+export function serializeRoll20CocSheetImport(source: CharacterClipboardSource): string {
+  const payload: SecretDiceImportPayload = {
+    character: source.name.trim() || '새로운 탐사자',
+    attributes: buildRoll20CocSheetAttributes(source),
+    abilities: {},
+  };
+
+  return ['[R20JE:COC7_IMPORT:1]', JSON.stringify(payload, null, 2), '[/R20JE]'].join('\n');
+}
+
 function buildSecretDiceImportPayload(
   source: CharacterClipboardSource,
   selectedOptionIds: string[],
@@ -333,18 +392,81 @@ function buildSecretDiceAttributes(
 ): Record<string, Roll20Attribute> {
   const derived = calculateDerivedStats(source.stats);
   const attributes: Record<string, Roll20Attribute> = {
-    hp: { current: derived.hp, max: derived.hp },
-    mp: { current: derived.mp, max: derived.mp },
+    hp: createRoll20Attribute(derived.hp),
+    mp: createRoll20Attribute(derived.mp),
   };
 
   selectedOptions.forEach((option) => {
-    attributes[option.attributeName] = {
-      current: option.value,
-      max: option.id === 'stat:SAN' || option.id === 'stat:LUCK' ? 99 : '',
-    };
+    attributes[option.attributeName] = createRoll20Attribute(option.value);
   });
 
   return attributes;
+}
+
+function buildRoll20CocSheetAttributes(
+  source: CharacterClipboardSource,
+): Record<string, Roll20Attribute> {
+  const derived = calculateDerivedStats(source.stats, source.edition ?? 'coc7');
+  const attributes: Record<string, Roll20Attribute> = {
+    name: createRoll20Attribute(source.name.trim() || '새로운 탐사자'),
+    player: createRoll20Attribute(source.player?.trim() ?? ''),
+    occupation: createRoll20Attribute(source.occupation?.trim() ?? ''),
+    age: createRoll20Attribute(source.age?.trim() ?? ''),
+    sex: createRoll20Attribute(source.gender?.trim() ?? ''),
+    birthplace: createRoll20Attribute(source.birthplace?.trim() ?? ''),
+    hp: createRoll20Attribute(derived.hp),
+    hp_max: createRoll20Attribute(derived.hp),
+    mp: createRoll20Attribute(derived.mp),
+    mp_max: createRoll20Attribute(derived.mp),
+    san_thresh: createRoll20Attribute(fourFifths(source.sanity.current)),
+    san_max: createRoll20Attribute(derived.san),
+    san_start: createRoll20Attribute(derived.san),
+  };
+
+  secretDiceStatDefinitions.forEach((definition) => {
+    attributes[definition.attributeKey] = createRoll20Attribute(
+      clampRollValue(definition.getValue(source)),
+    );
+  });
+
+  appendRoll20CocSheetSkills(attributes, source.skills, source.stats);
+
+  return attributes;
+}
+
+function appendRoll20CocSheetSkills(
+  attributes: Record<string, Roll20Attribute>,
+  skills: SheetSkill[],
+  stats: InvestigatorStats,
+) {
+  let otherSkillIndex = 1;
+
+  sortSkillsByKoreanName(skills)
+    .filter((skill) => !isSkillGroup(skill))
+    .forEach((skill) => {
+      const total = calculateSkillTotal(skill, stats);
+      const attributeName = roll20CocSheetSkillAttributeNames[skill.id];
+
+      if (attributeName) {
+        attributes[attributeName] = createRoll20Attribute(total);
+        return;
+      }
+
+      if (otherSkillIndex > 6) return;
+
+      attributes[`otherskill${otherSkillIndex}_name`] = createRoll20Attribute(
+        skill.name.trim() || '이름 없는 기능치',
+      );
+      attributes[`otherskill${otherSkillIndex}`] = createRoll20Attribute(total);
+      otherSkillIndex += 1;
+    });
+}
+
+function createRoll20Attribute(current: number | string): Roll20Attribute {
+  return {
+    current,
+    max: '',
+  };
 }
 
 function buildSecretDiceMacro(

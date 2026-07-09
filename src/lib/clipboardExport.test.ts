@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCharacterClipboardPayload,
   buildSecretDiceRollOptions,
+  serializeRoll20CocSheetImport,
   serializeCharacterClipboardPayload,
   serializeSecretDiceImport,
 } from './clipboardExport';
@@ -185,6 +186,96 @@ describe('buildCharacterClipboardPayload', () => {
 });
 
 describe('secret dice Roll20 import export', () => {
+  it('serializes current COC7 sheet fields and skills as Roll20 attributes without abilities', () => {
+    const text = serializeRoll20CocSheetImport({
+      name: '롤20 탐사자',
+      player: '테스트 플레이어',
+      occupation: '사립탐정',
+      age: '27',
+      gender: '여성',
+      birthplace: '서울',
+      stats,
+      sanity,
+      skills: [
+        ...skills,
+        {
+          id: 'mechanical-repair',
+          name: '기계수리',
+          base: 10,
+          occupation: 20,
+          interest: 0,
+          other: 0,
+          growth: 0,
+          checked: false,
+        },
+        {
+          id: 'art-craft',
+          name: '예술/공예',
+          base: 5,
+          occupation: 0,
+          interest: 0,
+          other: 0,
+          growth: 0,
+          checked: false,
+          isGroup: true,
+        },
+        {
+          id: 'art-craft-cooking',
+          name: '예술/공예(요리)',
+          base: 5,
+          occupation: 10,
+          interest: 5,
+          other: 0,
+          growth: 0,
+          checked: false,
+          parentId: 'art-craft',
+        },
+      ],
+      weapons: [],
+      iconUrl: 'https://example.com/portrait.png',
+    });
+    const json = JSON.parse(text.replace('[R20JE:COC7_IMPORT:1]\n', '').replace('\n[/R20JE]', ''));
+
+    expect(text.startsWith('[R20JE:COC7_IMPORT:1]\n')).toBe(true);
+    expect(text.endsWith('\n[/R20JE]')).toBe(true);
+    expect(json).toMatchObject({
+      character: '롤20 탐사자',
+      attributes: {
+        name: { current: '롤20 탐사자', max: '' },
+        player: { current: '테스트 플레이어', max: '' },
+        occupation: { current: '사립탐정', max: '' },
+        age: { current: '27', max: '' },
+        sex: { current: '여성', max: '' },
+        birthplace: { current: '서울', max: '' },
+        hp: { current: 13, max: '' },
+        hp_max: { current: 13, max: '' },
+        mp: { current: 11, max: '' },
+        mp_max: { current: 11, max: '' },
+        str: { current: 60, max: '' },
+        con: { current: 70, max: '' },
+        pow: { current: 55, max: '' },
+        dex: { current: 80, max: '' },
+        app: { current: 45, max: '' },
+        siz: { current: 65, max: '' },
+        int: { current: 50, max: '' },
+        edu: { current: 75, max: '' },
+        san: { current: 47, max: '' },
+        san_thresh: { current: 37, max: '' },
+        san_max: { current: 55, max: '' },
+        san_start: { current: 55, max: '' },
+        luck: { current: 40, max: '' },
+        spot_hidden: { current: 55, max: '' },
+        dodge: { current: 50, max: '' },
+        mech_repair: { current: 30, max: '' },
+        otherskill1_name: { current: '예술/공예(요리)', max: '' },
+        otherskill1: { current: 20, max: '' },
+      },
+      abilities: {},
+    });
+    expect(json.attributes.color).toBeUndefined();
+    expect(json.attributes.imageUrl).toBeUndefined();
+  });
+
   it('lists selectable characteristic and skill rolls from current sheet values', () => {
     const options = buildSecretDiceRollOptions({
       name: '비밀 탐사자',
@@ -251,8 +342,8 @@ describe('secret dice Roll20 import export', () => {
     expect(json).toMatchObject({
       character: '비밀 탐사자',
       attributes: {
-        hp: { current: 13, max: 13 },
-        mp: { current: 11, max: 11 },
+        hp: { current: 13, max: '' },
+        mp: { current: 11, max: '' },
         str: { current: 60, max: '' },
         spothidden: { current: 55, max: '' },
       },
@@ -322,7 +413,7 @@ describe('secret dice Roll20 import export', () => {
     expect(json.abilities['재력_비밀']).toContain('{{extreme=[[floor(@{creditrating}/5)]]}}');
   });
 
-  it('exports luck with the Roll20 maximum shown on the sheet', () => {
+  it('exports luck without touching the Roll20 attribute max column', () => {
     const text = serializeSecretDiceImport(
       {
         name: '행운 테스트',
@@ -336,7 +427,7 @@ describe('secret dice Roll20 import export', () => {
     );
     const json = JSON.parse(text.replace('[R20JE:COC7_IMPORT:1]\n', '').replace('\n[/R20JE]', ''));
 
-    expect(json.attributes.luck).toEqual({ current: 40, max: 99 });
+    expect(json.attributes.luck).toEqual({ current: 40, max: '' });
   });
 
   it('uses the correction dice template when requested', () => {

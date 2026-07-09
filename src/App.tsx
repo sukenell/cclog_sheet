@@ -30,6 +30,7 @@ import {
 import {
   buildCharacterClipboardPayload,
   buildSecretDiceRollOptions,
+  serializeRoll20CocSheetImport,
   serializeCharacterClipboardPayload,
   serializeSecretDiceImport,
   type SecretDiceRollOption,
@@ -81,7 +82,12 @@ import {
   SheetSectionId,
   toggleSectionOpen,
 } from './lib/sections';
-import { createInitialSidebarOpenState, toggleSidebarOpen } from './lib/sidebar';
+import {
+  createInitialSidebarOpenState,
+  responsiveSidebarMediaQuery,
+  shouldRevealSidebarAtPageTop,
+  toggleSidebarOpen,
+} from './lib/sidebar';
 import {
   completeScenarioDraft,
   createEmptyScenarioDraft,
@@ -201,6 +207,7 @@ const r20JsonExporterUrl = 'https://chromewebstore.google.com/detail/r20-jsonexp
 
 type UsageGuideImage = {
   src: string;
+  fallbackSrc?: string;
   alt: string;
 };
 
@@ -221,18 +228,20 @@ const usageGuideSections = [
     description: `시트 타입을 고르고, 특성치와 기능치 등의 입력 내용을 손쉽게 계산할 수 있습니다. 현재 지원하는 룰은 COC 7판${isInsaneEnabled ? '과 InSane' : ''}입니다.`,
     images: [
       {
-        src: `${appBasePath}/usage-guide/usage-guide-basic-flow.svg`,
+        src: `${appBasePath}/usage-guide/usage-guide-basic-flow.png`,
+        fallbackSrc: `${appBasePath}/usage-guide/usage-guide-basic-flow.jpg`,
         alt: '시트 선택부터 작성 완료까지의 기본 흐름',
       },
     ],
   },
   {
-    title: '2. 팔레트 복사',
+    title: '2. 코코포 팔레트 복사',
     description:
-      "상단 '팔레트복사' 버튼을 누르면, 현재 시트의 정보가 클립보드에 복사되며, 코코포리아에서 붙여넣기를 통해 바로 캐릭터 시트로 사용할 수 있습니다.",
+      "상단 '코코포 팔레트 복사' 버튼을 누르면, 현재 시트의 정보가 클립보드에 복사되며, 코코포리아에서 붙여넣기를 통해 바로 캐릭터 시트로 사용할 수 있습니다.",
     images: [
       {
-        src: `${appBasePath}/usage-guide/usage-guide-inputs.svg`,
+        src: `${appBasePath}/usage-guide/usage-guide-inputs.png`,
+        fallbackSrc: `${appBasePath}/usage-guide/usage-guide-inputs.jpg`,
         alt: '특성치와 기능치 입력 항목 예시',
       },
     ],
@@ -251,8 +260,9 @@ const usageGuideSections = [
     ),
     images: [
       {
-        src: `${appBasePath}/usage-guide/usage-guide-export-import.svg`,
-        alt: '내보내기와 가져오기 버튼 안내',
+        src: `${appBasePath}/usage-guide/usage-guide-export-import.png`,
+        fallbackSrc: `${appBasePath}/usage-guide/usage-guide-export-import.jpg`,
+        alt: '세이브와 로드 버튼 안내',
       },
     ],
   },
@@ -264,8 +274,9 @@ const usageGuideSections = [
             'InSane 어빌리티는 룰북내 비밀번호를 입력하면, 자동 불러오기 기능이 활성화 됩니다.',
           images: [
             {
-              src: `${appBasePath}/usage-guide/usage-guide-faq.svg`,
-              alt: '팔레트 복사와 잠금 안내',
+              src: `${appBasePath}/usage-guide/usage-guide-faq.png`,
+              fallbackSrc: `${appBasePath}/usage-guide/usage-guide-faq.jpg`,
+              alt: '코코포 팔레트 복사와 잠금 안내',
             },
           ],
         } satisfies UsageGuideSection,
@@ -361,6 +372,11 @@ function App() {
   const characterClipboardSource = useMemo(
     () => ({
       name: sheet.basic.name,
+      player: sheet.basic.player,
+      occupation: sheet.basic.occupation,
+      age: sheet.basic.age,
+      gender: sheet.basic.gender,
+      birthplace: sheet.basic.birthplace,
       stats: sheet.stats,
       sanity,
       skills: sheet.skills,
@@ -375,8 +391,13 @@ function App() {
     [
       cocEdition,
       sanity,
+      sheet.basic.age,
+      sheet.basic.birthplace,
+      sheet.basic.gender,
       sheet.basic.imageUrl,
       sheet.basic.name,
+      sheet.basic.occupation,
+      sheet.basic.player,
       sheet.basic.standingImages,
       sheet.skills,
       sheet.stats,
@@ -492,7 +513,18 @@ function App() {
   }
 
   function toggleSidebar() {
+    const shouldRevealAtPageTop = shouldRevealSidebarAtPageTop(
+      isSidebarOpen,
+      window.matchMedia(responsiveSidebarMediaQuery).matches,
+    );
+
     setIsSidebarOpen((current) => toggleSidebarOpen(current));
+
+    if (shouldRevealAtPageTop) {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
   }
 
   function navigateToPage(page: AppPage, sectionId?: SheetSectionId) {
@@ -873,7 +905,7 @@ function App() {
           setSheet(normalizeSheetState(parsedArchive as SheetStateArchive, targetEdition));
         }
       } catch {
-        setGrowthMessage('가져오기 파일을 읽지 못했습니다.');
+        setGrowthMessage('로드 파일을 읽지 못했습니다.');
       }
     };
     reader.readAsText(file);
@@ -895,6 +927,13 @@ function App() {
 
     const payload = buildCharacterClipboardPayload(characterClipboardSource);
     const text = serializeCharacterClipboardPayload(payload);
+
+    await writeClipboardText(text);
+    setToolbarMessage('');
+  }
+
+  async function copyRoll20CocSheetToClipboard() {
+    const text = serializeRoll20CocSheetImport(characterClipboardSource);
 
     await writeClipboardText(text);
     setToolbarMessage('');
@@ -992,7 +1031,7 @@ function App() {
               onChange={(event) => handleGameSystemChange(event.target.value as GameSystem)}
             >
               <option value="coc7">COC 7판 시트</option>
-              {/* <option value="coc6">COC 6판</option> */}
+              <option value="coc6">COC 6판</option>
               {isInsaneEnabled && <option value="insan">InSane 시트</option>}
             </select>
           </div>
@@ -1048,39 +1087,50 @@ function App() {
               <span>굴림</span>
             </button>
             */}
-            <button type="button" className="icon-button" onClick={exportJson} title="JSON 내보내기">
+            <button type="button" className="icon-button" onClick={exportJson} title="세이브">
               <Download size={18} />
-              <span>내보내기</span>
+              <span>세이브</span>
             </button>
             <button
               type="button"
               className="icon-button"
               onClick={() => importInputRef.current?.click()}
-              title="JSON 가져오기"
+              title="로드"
             >
               <FileInput size={18} />
-              <span>가져오기</span>
+              <span>로드</span>
             </button>
             <input ref={importInputRef} className="sr-only" type="file" accept="application/json" onChange={importJson} />
             <button
               type="button"
               className="icon-button"
               onClick={() => void copyCharacterToClipboard()}
-              title="팔레트를 복사"
+              title="코코포 팔레트를 복사"
             >
               <Clipboard size={18} />
-              <span>팔레트 복사</span>
+              <span>코코포 팔레트 복사</span>
             </button>
             {gameSystem === 'coc7' && (
-              <button
-                type="button"
-                className="icon-button"
-                onClick={openSecretDiceDialog}
-                title="비밀 주사위를 복사"
-              >
-                <Dice6 size={18} />
-                <span>비밀 주사위 복사</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => void copyRoll20CocSheetToClipboard()}
+                  title="Roll20 COC 시트 특성치를 복사"
+                >
+                  <Clipboard size={18} />
+                  <span>Roll20 시트 복사</span>
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={openSecretDiceDialog}
+                  title="비밀 주사위를 복사"
+                >
+                  <Dice6 size={18} />
+                  <span>비밀 주사위 복사</span>
+                </button>
+              </>
             )}
             {/* 저장됨 버튼은 기능치 확정 전까지 숨김. */}
             <button type="button" className="icon-button danger" onClick={resetSheet} title="초기화">
@@ -1187,7 +1237,7 @@ function App() {
                     </button>
                   </div>
                   {sheet.basic.standingImages.length === 0 ? (
-                    <p className="field-hint">라벨과 이미지 주소를 추가하면 팔레트 복사에 함께 포함됩니다.</p>
+                    <p className="field-hint">라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다.</p>
                   ) : (
                     <div className="standing-image-list">
                       {sheet.basic.standingImages.map((standingImage, index) => (
@@ -1748,6 +1798,11 @@ function UsageGuidePage() {
                   src={image.src}
                   alt={image.alt}
                   loading="lazy"
+                  onError={(event) => {
+                    if (!image.fallbackSrc || event.currentTarget.dataset.fallbackApplied === 'true') return;
+                    event.currentTarget.dataset.fallbackApplied = 'true';
+                    event.currentTarget.src = image.fallbackSrc;
+                  }}
                   key={image.src}
                 />
               ))}
@@ -1789,7 +1844,7 @@ function CocExportDialog({
       >
         <header className="secret-dice-header">
           <div>
-            <h2 id="coc-export-title">COC 내보내기</h2>
+            <h2 id="coc-export-title">COC 세이브</h2>
             <strong className="secret-dice-character">
               {editionLabel} · {characterName}
             </strong>
@@ -1802,15 +1857,15 @@ function CocExportDialog({
         <div className="coc-export-options">
           <button type="button" onClick={onExportFull}>
             <Download size={17} />
-            <span>전체 내보내기</span>
+            <span>전체 세이브</span>
           </button>
           <button type="button" onClick={onExportInvestedSkills}>
             <BookOpen size={17} />
-            <span>투자 기능치만 내보내기</span>
+            <span>투자 기능치만 세이브</span>
           </button>
           <button type="button" onClick={onExportCharacteristicsOnly}>
             <Sparkles size={17} />
-            <span>특성치만 내보내기</span>
+            <span>특성치만 세이브</span>
           </button>
         </div>
       </section>
@@ -2450,7 +2505,7 @@ function InsaneSheetView({
                 </button>
               </div>
               {sheet.basic.standingImages.length === 0 ? (
-                <p className="field-hint">라벨과 이미지 주소를 추가하면 팔레트 복사에 함께 포함됩니다.</p>
+                <p className="field-hint">라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다.</p>
               ) : (
                 <div className="standing-image-list">
                   {sheet.basic.standingImages.map((standingImage, index) => (

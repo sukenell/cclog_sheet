@@ -16,4 +16,4 @@ npm test
 npm run build
 ```
 
-작성한 시트는 브라우저 `localStorage`에 자동 저장되며, JSON 내보내기/가져오기로 파일 이동이 가능합니다.
+작성한 시트는 브라우저 `localStorage`에 자동 저장되며, JSON 세이브/로드로 파일 이동이 가능합니다.

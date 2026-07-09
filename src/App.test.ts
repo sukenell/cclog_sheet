@@ -34,7 +34,7 @@ describe('topbar archive controls', () => {
     expect(importBlock).not.toContain("if (gameSystem === 'insan')");
   });
 
-  it('offers InSane only behind the development build gate while keeping the COC 6th edition option commented out', () => {
+  it('offers COC 6th edition while keeping InSane behind the development build gate', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const jsxCommentBlocks = [...source.matchAll(/\{\/\*[\s\S]*?\*\/\}/g)].map(
       ([block]) => block,
@@ -48,13 +48,13 @@ describe('topbar archive controls', () => {
     expect(source).toContain("type GameSystem = 'coc7' | 'coc6' | 'insan';");
     expect(source).toContain("const isInsaneEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_INSANE === 'true';");
     expect(visibleSystemSelectBlock).toContain('7판 시트');
+    expect(visibleSystemSelectBlock).toContain('<option value="coc6">COC 6판</option>');
     expect(visibleSystemSelectBlock).toContain('{isInsaneEnabled && <option value="insan">InSane 시트</option>}');
-    expect(visibleSystemSelectBlock).not.toContain('COC 6판');
     expect(
       jsxCommentBlocks.some(
         (block) => block.includes('value="coc6"') && block.includes('COC 6판'),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(source).toContain('handleGameSystemChange');
     expect(source).toContain('convertCocSheetEdition');
     expect(source).toContain('<strong>CCLog Sheet</strong>');
@@ -116,6 +116,16 @@ describe('topbar archive controls', () => {
     expect(source).not.toContain('<a href="#basic">');
   });
 
+  it('scrolls back to the top when opening the responsive sidebar menu', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('responsiveSidebarMediaQuery');
+    expect(source).toContain('shouldRevealSidebarAtPageTop');
+    expect(source).toContain('window.matchMedia(responsiveSidebarMediaQuery).matches');
+    expect(source).toContain('window.requestAnimationFrame(() => {');
+    expect(source).toContain("window.scrollTo({ top: 0, behavior: 'smooth' });");
+  });
+
   it('renders usage guide cards with individual copy and images', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 
@@ -128,14 +138,22 @@ describe('topbar archive controls', () => {
     expect(source).toContain('images: [');
     expect(source).not.toContain('imageSrc:');
     expect(source).not.toContain('imageAlt:');
-    expect(source).toContain('usage-guide/usage-guide-basic-flow.svg');
-    expect(source).toContain('usage-guide/usage-guide-inputs.svg');
-    expect(source).toContain('usage-guide/usage-guide-export-import.svg');
-    expect(source).toContain('usage-guide/usage-guide-faq.svg');
+    expect(source).toContain('usage-guide/usage-guide-basic-flow.png');
+    expect(source).toContain('usage-guide/usage-guide-inputs.png');
+    expect(source).toContain('usage-guide/usage-guide-export-import.png');
+    expect(source).toContain('usage-guide/usage-guide-faq.png');
+    expect(source).toContain('usage-guide/usage-guide-basic-flow.jpg');
+    expect(source).toContain('usage-guide/usage-guide-inputs.jpg');
+    expect(source).toContain('usage-guide/usage-guide-export-import.jpg');
+    expect(source).toContain('usage-guide/usage-guide-faq.jpg');
+    expect(source).not.toContain('usage-guide/usage-guide-basic-flow.svg');
     expect(source).toContain('<img');
     expect(source).toContain('className="usage-guide-image"');
     expect(source).toContain('section.images.map((image)');
     expect(source).toContain('src={image.src}');
+    expect(source).toContain('onError={(event) => {');
+    expect(source).toContain("event.currentTarget.dataset.fallbackApplied = 'true';");
+    expect(source).toContain('event.currentTarget.src = image.fallbackSrc;');
     expect(source).toContain('alt={image.alt}');
     expect(source).toContain('{section.description}');
     expect(source).not.toContain('guideSections.map((title)');
@@ -158,22 +176,39 @@ describe('topbar archive controls', () => {
   });
 
   it('keeps usage guide image assets together in the public usage-guide directory', () => {
-    const imageFiles = [
-      'usage-guide-basic-flow.svg',
-      'usage-guide-inputs.svg',
-      'usage-guide-export-import.svg',
-      'usage-guide-faq.svg',
+    const imageBaseNames = [
+      'usage-guide-basic-flow',
+      'usage-guide-inputs',
+      'usage-guide-export-import',
+      'usage-guide-faq',
     ];
     const imageDir = resolve(process.cwd(), 'public', 'usage-guide');
+    const pngSignature = [0x89, 0x50, 0x4e, 0x47];
+    const jpgSignature = [0xff, 0xd8, 0xff];
 
     expect(existsSync(imageDir)).toBe(true);
 
-    imageFiles.forEach((fileName) => {
-      const filePath = resolve(imageDir, fileName);
+    imageBaseNames.forEach((baseName) => {
+      const pngPath = resolve(imageDir, `${baseName}.png`);
+      const jpgPath = resolve(imageDir, `${baseName}.jpg`);
 
-      expect(existsSync(filePath)).toBe(true);
-      expect(readFileSync(filePath, 'utf8')).toContain('<svg');
-      expect(existsSync(resolve(process.cwd(), 'public', fileName))).toBe(false);
+      expect(existsSync(pngPath) || existsSync(jpgPath)).toBe(true);
+      expect(existsSync(resolve(imageDir, `${baseName}.svg`))).toBe(false);
+      expect(existsSync(resolve(process.cwd(), 'public', `${baseName}.png`))).toBe(false);
+      expect(existsSync(resolve(process.cwd(), 'public', `${baseName}.jpg`))).toBe(false);
+
+      if (existsSync(pngPath)) {
+        const fileBuffer = readFileSync(pngPath);
+        expect([...fileBuffer.subarray(0, pngSignature.length)]).toEqual(pngSignature);
+        const width = fileBuffer.readUInt32BE(16);
+        const height = fileBuffer.readUInt32BE(20);
+        expect(width / height).toBeCloseTo(16 / 9, 2);
+      }
+
+      if (existsSync(jpgPath)) {
+        const fileBuffer = readFileSync(jpgPath);
+        expect([...fileBuffer.subarray(0, jpgSignature.length)]).toEqual(jpgSignature);
+      }
     });
   });
 
@@ -218,9 +253,9 @@ describe('topbar archive controls', () => {
 
     expect(source).toContain('isCocExportDialogOpen');
     expect(source).toContain('CocExportDialog');
-    expect(source).toContain('전체 내보내기');
-    expect(source).toContain('투자 기능치만 내보내기');
-    expect(source).toContain('특성치만 내보내기');
+    expect(source).toContain('전체 세이브');
+    expect(source).toContain('투자 기능치만 세이브');
+    expect(source).toContain('특성치만 세이브');
     expect(source).toContain('createCocExportArchive');
   });
 
@@ -230,20 +265,34 @@ describe('topbar archive controls', () => {
     expect(source).toContain("const statOrder: StatKey[] = ['STR', 'DEX', 'POW', 'CON', 'APP', 'EDU', 'SIZ', 'INT'];");
   });
 
+  it('renames topbar save, load, and Ccfolia palette copy actions', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+
+    expect(source).toContain('title="세이브"');
+    expect(source).toContain('<span>세이브</span>');
+    expect(source).toContain('title="로드"');
+    expect(source).toContain('<span>로드</span>');
+    expect(source).toContain('title="코코포 팔레트를 복사"');
+    expect(source).toContain('<span>코코포 팔레트 복사</span>');
+    expect(source).not.toContain('<span>내보내기</span>');
+    expect(source).not.toContain('<span>가져오기</span>');
+    expect(source).not.toContain('<span>팔레트 복사</span>');
+  });
+
   it('copies the InSane palette only from the toolbar after required fields are filled', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 
     expect(source).toContain('getInsanePaletteCopyError(insaneSheet)');
     expect(source).toContain('serializeInsaneCcfoliaCharacter(insaneSheet)');
-    expect(source).toContain('<span>팔레트 복사</span>');
-    expect(source).toContain('title="팔레트를 복사"');
+    expect(source).toContain('<span>코코포 팔레트 복사</span>');
+    expect(source).toContain('title="코코포 팔레트를 복사"');
     expect(source).not.toContain('데이터 복사');
     expect(source).not.toContain('TextArea label="코코포리아 API / 채팅팔레트"');
   });
 
   it('opens a CoC secret dice copy dialog from the toolbar', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
-    const paletteButtonIndex = source.indexOf('<span>팔레트 복사</span>');
+    const paletteButtonIndex = source.indexOf('<span>코코포 팔레트 복사</span>');
     const secretDiceButtonIndex = source.indexOf('<span>비밀 주사위 복사</span>');
 
     expect(source).toContain('buildSecretDiceRollOptions');
@@ -259,6 +308,19 @@ describe('topbar archive controls', () => {
     expect(source).toContain('일반 주사위 복사');
     expect(source).toContain("copySecretDiceToClipboard('bonus')");
     expect(source).toContain('보정 주사위 복사');
+  });
+
+  it('copies Roll20 COC sheet attributes from the toolbar without opening the secret dice dialog', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+    const paletteButtonIndex = source.indexOf('<span>코코포 팔레트 복사</span>');
+    const roll20SheetButtonIndex = source.indexOf('<span>Roll20 시트 복사</span>');
+    const secretDiceButtonIndex = source.indexOf('<span>비밀 주사위 복사</span>');
+
+    expect(source).toContain('serializeRoll20CocSheetImport');
+    expect(source).toContain('copyRoll20CocSheetToClipboard');
+    expect(roll20SheetButtonIndex).toBeGreaterThan(paletteButtonIndex);
+    expect(roll20SheetButtonIndex).toBeLessThan(secretDiceButtonIndex);
+    expect(source).toContain('title="Roll20 COC 시트 특성치를 복사"');
   });
 
   it('splits InSane basic information into the CoC two-card top layout', () => {
