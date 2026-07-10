@@ -390,11 +390,7 @@ function buildSecretDiceAttributes(
   source: CharacterClipboardSource,
   selectedOptions: SecretDiceRollOption[],
 ): Record<string, Roll20Attribute> {
-  const derived = calculateDerivedStats(source.stats);
-  const attributes: Record<string, Roll20Attribute> = {
-    hp: createRoll20Attribute(derived.hp),
-    mp: createRoll20Attribute(derived.mp),
-  };
+  const attributes = buildRoll20CocVitalsAttributes(source);
 
   selectedOptions.forEach((option) => {
     attributes[option.attributeName] = createRoll20Attribute(option.value);
@@ -406,7 +402,6 @@ function buildSecretDiceAttributes(
 function buildRoll20CocSheetAttributes(
   source: CharacterClipboardSource,
 ): Record<string, Roll20Attribute> {
-  const derived = calculateDerivedStats(source.stats, source.edition ?? 'coc7');
   const attributes: Record<string, Roll20Attribute> = {
     name: createRoll20Attribute(source.name.trim() || '새로운 탐사자'),
     player: createRoll20Attribute(source.player?.trim() ?? ''),
@@ -414,13 +409,7 @@ function buildRoll20CocSheetAttributes(
     age: createRoll20Attribute(source.age?.trim() ?? ''),
     sex: createRoll20Attribute(source.gender?.trim() ?? ''),
     birthplace: createRoll20Attribute(source.birthplace?.trim() ?? ''),
-    hp: createRoll20Attribute(derived.hp),
-    hp_max: createRoll20Attribute(derived.hp),
-    mp: createRoll20Attribute(derived.mp),
-    mp_max: createRoll20Attribute(derived.mp),
-    san_thresh: createRoll20Attribute(fourFifths(source.sanity.current)),
-    san_max: createRoll20Attribute(derived.san),
-    san_start: createRoll20Attribute(derived.san),
+    ...buildRoll20CocVitalsAttributes(source),
   };
 
   secretDiceStatDefinitions.forEach((definition) => {
@@ -432,6 +421,25 @@ function buildRoll20CocSheetAttributes(
   appendRoll20CocSheetSkills(attributes, source.skills, source.stats);
 
   return attributes;
+}
+
+function buildRoll20CocVitalsAttributes(
+  source: CharacterClipboardSource,
+): Record<string, Roll20Attribute> {
+  const derived = calculateDerivedStats(source.stats, source.edition ?? 'coc7');
+  const sanityStart = derived.san;
+
+  return {
+    hp: createRoll20Attribute(derived.hp),
+    hp_max: createRoll20Attribute(derived.hp),
+    mp: createRoll20Attribute(derived.mp),
+    mp_max: createRoll20Attribute(derived.mp),
+    san: createRoll20Attribute(clampRollValue(source.sanity.current)),
+    san_thresh: createRoll20Attribute(fourFifths(sanityStart)),
+    san_max: createRoll20Attribute(derived.san),
+    san_start: createRoll20Attribute(sanityStart),
+    luck: createRoll20Attribute(derived.luck),
+  };
 }
 
 function appendRoll20CocSheetSkills(

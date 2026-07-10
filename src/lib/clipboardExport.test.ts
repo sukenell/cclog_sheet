@@ -260,7 +260,7 @@ describe('secret dice Roll20 import export', () => {
         int: { current: 50, max: '' },
         edu: { current: 75, max: '' },
         san: { current: 47, max: '' },
-        san_thresh: { current: 37, max: '' },
+        san_thresh: { current: 44, max: '' },
         san_max: { current: 55, max: '' },
         san_start: { current: 55, max: '' },
         luck: { current: 40, max: '' },
@@ -356,6 +356,33 @@ describe('secret dice Roll20 import export', () => {
     });
     expect(json.attributes.con).toBeUndefined();
     expect(Object.keys(json.abilities)).toEqual(['근력_비밀', '관찰력_비밀']);
+  });
+
+  it('keeps Roll20 sheet vitals in secret dice imports even when their rolls are not selected', () => {
+    const text = serializeSecretDiceImport(
+      {
+        name: '생명력 테스트',
+        stats,
+        sanity,
+        skills,
+        weapons: [],
+      },
+      ['stat:STR'],
+      'normal',
+    );
+    const json = JSON.parse(text.replace('[R20JE:COC7_IMPORT:1]\n', '').replace('\n[/R20JE]', ''));
+
+    expect(json.attributes).toMatchObject({
+      hp: { current: 13, max: '' },
+      hp_max: { current: 13, max: '' },
+      mp: { current: 11, max: '' },
+      mp_max: { current: 11, max: '' },
+      san: { current: 47, max: '' },
+      san_start: { current: 55, max: '' },
+      san_thresh: { current: 44, max: '' },
+      san_max: { current: 55, max: '' },
+      luck: { current: 40, max: '' },
+    });
   });
 
   it('uses pasted Roll20 COC7 variable names for built-in skills', () => {
