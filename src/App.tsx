@@ -1014,6 +1014,7 @@ function App() {
           <div className="brand-copy">
             <div className="brand-title-row">
               <strong>CCLog Sheet</strong>
+              {/*
               <a
                 className="brand-help-button"
                 href={helpPath}
@@ -1023,6 +1024,7 @@ function App() {
               >
                 <HelpCircle size={20} />
               </a>
+              */}
             </div>
             <select
               className="game-system-select"
@@ -1186,9 +1188,11 @@ function App() {
           />
         )}
 
+        {/*
         {activePage === 'usage' ? (
           <UsageGuidePage />
         ) : (
+        */}
         <div className="content-grid">
           {isInsaneMode && insaneSheet ? (
             <InsaneSheetView
@@ -1773,7 +1777,9 @@ function App() {
             </>
           )}
         </div>
+        {/*
         )}
+        */}
       </main>
     </div>
   );

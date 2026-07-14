@@ -81,25 +81,34 @@ describe('topbar archive controls', () => {
     expect(changeBlock).toContain("if (nextSystem === 'insan' && !isInsaneEnabled) return;");
   });
 
-  it('opens a usage guide page from the CCLog Sheet brand help icon', () => {
+  it('keeps the usage guide entry point commented out', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
-    const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    const jsxCommentBlocks = [...source.matchAll(/\{\/\*[\s\S]*?\*\/\}/g)].map(
+      ([block]) => block,
+    );
+    const visibleSource = source.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 
     expect(source).toContain('HelpCircle');
     expect(source).toContain(
       'const [activePage, setActivePage] = useState<AppPage>(() => getAppPageFromPath(window.location.pathname, appBasePath));',
     );
     expect(source).toContain('const helpPath = createAppPath(appBasePath, \'usage\');');
-    expect(source).toContain('href={helpPath}');
-    expect(source).toContain('aria-label="사용방법 보기"');
-    expect(source).toContain('onClick={showUsagePage}');
-    expect(source).toContain('title="사용방법"');
+    expect(
+      jsxCommentBlocks.some(
+        (block) =>
+          block.includes('className="brand-help-button"') &&
+          block.includes('aria-label="사용방법 보기"') &&
+          block.includes('onClick={showUsagePage}'),
+      ),
+    ).toBe(true);
+    expect(
+      jsxCommentBlocks.some((block) => block.includes('<UsageGuidePage />')),
+    ).toBe(true);
+    expect(visibleSource).not.toContain('aria-label="사용방법 보기"');
+    expect(visibleSource).not.toContain('onClick={showUsagePage}');
+    expect(visibleSource).not.toContain('<UsageGuidePage />');
     expect(source).toContain('UsageGuidePage');
     expect(source).toContain('사용방법');
-    expect(source).toContain('<HelpCircle size={20} />');
-    expect(styles).toContain('width: 32px;');
-    expect(styles).toContain('height: 32px;');
-    expect(styles).toContain('.brand-help-button svg');
     expect(source).not.toContain('세부 내용은 여기에 작성하세요.');
   });
 

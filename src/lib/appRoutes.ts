@@ -21,11 +21,10 @@ export function createSheetSectionPath(basePath: string, sectionId: string): str
   return `${createAppPath(basePath, 'sheet')}#${sectionId}`;
 }
 
-export function getAppPageFromPath(pathname: string, basePath: string): AppPage {
-  const normalizedPath = normalizePath(pathname);
-  const helpPath = normalizePath(createAppPath(basePath, 'usage'));
-
-  return normalizedPath === helpPath || normalizedPath === '/help' ? 'usage' : 'sheet';
+export function getAppPageFromPath(_pathname: string, _basePath: string): AppPage {
+  // const helpPath = normalizePath(createAppPath(basePath, 'usage'));
+  // return normalizedPath === helpPath || normalizedPath === '/help' ? 'usage' : 'sheet';
+  return 'sheet';
 }
 
 function normalizePath(pathname: string): string {
