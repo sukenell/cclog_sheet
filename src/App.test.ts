@@ -34,7 +34,7 @@ describe('topbar archive controls', () => {
     expect(importBlock).not.toContain("if (gameSystem === 'insan')");
   });
 
-  it('offers COC 6th edition while keeping InSane behind the development build gate', () => {
+  it('keeps COC 6th edition commented out while keeping InSane behind the development build gate', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const jsxCommentBlocks = [...source.matchAll(/\{\/\*[\s\S]*?\*\/\}/g)].map(
       ([block]) => block,
@@ -48,13 +48,13 @@ describe('topbar archive controls', () => {
     expect(source).toContain("type GameSystem = 'coc7' | 'coc6' | 'insan';");
     expect(source).toContain("const isInsaneEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_INSANE === 'true';");
     expect(visibleSystemSelectBlock).toContain('7판 시트');
-    expect(visibleSystemSelectBlock).toContain('<option value="coc6">COC 6판</option>');
+    expect(visibleSystemSelectBlock).not.toContain('<option value="coc6">COC 6판</option>');
     expect(visibleSystemSelectBlock).toContain('{isInsaneEnabled && <option value="insan">InSane 시트</option>}');
     expect(
       jsxCommentBlocks.some(
         (block) => block.includes('value="coc6"') && block.includes('COC 6판'),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(source).toContain('handleGameSystemChange');
     expect(source).toContain('convertCocSheetEdition');
     expect(source).toContain('<strong>CCLog Sheet</strong>');
@@ -76,7 +76,8 @@ describe('topbar archive controls', () => {
 
     expect(loadGameSystemBlock).toContain("return resolveAvailableGameSystem(saved, 'coc7');");
     expect(resolveBlock).toContain("if ((system === 'insan' || system === 'insane') && isInsaneEnabled) return 'insan';");
-    expect(resolveBlock).toContain("if (system === 'coc6') return 'coc6';");
+    expect(resolveBlock).toContain("// if (system === 'coc6') return 'coc6';");
+    expect(changeBlock).toContain("if (nextSystem === 'coc6') return;");
     expect(resolveBlock).toContain('return fallback === \'insan\' && !isInsaneEnabled ? \'coc7\' : fallback;');
     expect(changeBlock).toContain("if (nextSystem === 'insan' && !isInsaneEnabled) return;");
   });

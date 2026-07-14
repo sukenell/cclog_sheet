@@ -574,6 +574,7 @@ function App() {
   }
 
   function handleGameSystemChange(nextSystem: GameSystem) {
+    if (nextSystem === 'coc6') return;
     if (nextSystem === 'insan' && !isInsaneEnabled) return;
     const availableNextSystem = resolveAvailableGameSystem(nextSystem, gameSystem);
 
@@ -1033,7 +1034,9 @@ function App() {
               onChange={(event) => handleGameSystemChange(event.target.value as GameSystem)}
             >
               <option value="coc7">COC 7판 시트</option>
+              {/*
               <option value="coc6">COC 6판</option>
+              */}
               {isInsaneEnabled && <option value="insan">InSane 시트</option>}
             </select>
           </div>
@@ -2092,7 +2095,7 @@ function loadInsaneSheet(): InsaneSheetState {
 
 function resolveAvailableGameSystem(system: unknown, fallback: GameSystem): GameSystem {
   if ((system === 'insan' || system === 'insane') && isInsaneEnabled) return 'insan';
-  if (system === 'coc6') return 'coc6';
+  // if (system === 'coc6') return 'coc6';
   if (system === 'coc7') return 'coc7';
   return fallback === 'insan' && !isInsaneEnabled ? 'coc7' : fallback;
 }
