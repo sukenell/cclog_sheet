@@ -307,7 +307,7 @@ describe('secret dice Roll20 import export', () => {
           kind: 'skill',
           label: '관찰력',
           value: 55,
-          attributeName: 'spothidden',
+          attributeName: 'spot_hidden',
           templateName: '@{spothidden_txt}',
         }),
         expect.objectContaining({
@@ -345,13 +345,13 @@ describe('secret dice Roll20 import export', () => {
         hp: { current: 13, max: '' },
         mp: { current: 11, max: '' },
         str: { current: 60, max: '' },
-        spothidden: { current: 55, max: '' },
+        spot_hidden: { current: 55, max: '' },
       },
       abilities: {
         '근력_비밀':
           '/w gm &{template:coc-1}{{name=@{str_txt}}}{{success=[[@{str}]]}}{{hard=[[floor(@{str} /2)]]}}{{extreme=[[floor(@{str}/5)]]}}{{roll1=[[1d100]]}}',
         '관찰력_비밀':
-          '/w gm &{template:coc-1}{{name=@{spothidden_txt}}}{{success=[[@{spothidden}]]}}{{hard=[[floor(@{spothidden} /2)]]}}{{extreme=[[floor(@{spothidden}/5)]]}}{{roll1=[[1d100]]}}',
+          '/w gm &{template:coc-1}{{name=@{spothidden_txt}}}{{success=[[@{spot_hidden}]]}}{{hard=[[floor(@{spot_hidden} /2)]]}}{{extreme=[[floor(@{spot_hidden}/5)]]}}{{roll1=[[1d100]]}}',
       },
     });
     expect(json.attributes.con).toBeUndefined();
@@ -431,13 +431,65 @@ describe('secret dice Roll20 import export', () => {
     const json = JSON.parse(text.replace('[R20JE:COC7_IMPORT:1]\n', '').replace('\n[/R20JE]', ''));
 
     expect(json.attributes).toMatchObject({
-      firearms_hg: { current: 30, max: '' },
-      mechrepair: { current: 30, max: '' },
-      creditrating: { current: 30, max: '' },
+      firearms_handgun: { current: 30, max: '' },
+      mech_repair: { current: 30, max: '' },
+      credit_rating: { current: 30, max: '' },
     });
     expect(json.abilities['사격(권총)_비밀']).toContain('{{name=@{firearms_hg_txt}}}');
-    expect(json.abilities['기계수리_비밀']).toContain('{{success=[[@{mechrepair}]]}}');
-    expect(json.abilities['재력_비밀']).toContain('{{extreme=[[floor(@{creditrating}/5)]]}}');
+    expect(json.abilities['기계수리_비밀']).toContain('{{success=[[@{mech_repair}]]}}');
+    expect(json.abilities['재력_비밀']).toContain('{{extreme=[[floor(@{credit_rating}/5)]]}}');
+  });
+
+  it('reuses official Roll20 label and value attributes for built-in skills', () => {
+    const expectedBindings = [
+      ['credit-rating', 'credit_rating', 'creditrating_txt'],
+      ['cthulhu-mythos', 'cthulhu_mythos', 'cthulhumythos_txt'],
+      ['drive-auto', 'drive_auto', 'driveauto_txt'],
+      ['elec-repair', 'elec_repair', 'elecrepair_txt'],
+      ['fast-talk', 'fast_talk', 'fasttalk_txt'],
+      ['firearms-handgun', 'firearms_handgun', 'firearms_hg_txt'],
+      ['firearms-rifle', 'firearms_rifle', 'firearms_rs_txt'],
+      ['first-aid', 'first_aid', 'firstaid_txt'],
+      ['library-use', 'library_use', 'libraryuse_txt'],
+      ['mechanical-repair', 'mech_repair', 'mechrepair_txt'],
+      ['natural-world', 'natural_world', 'naturalworld_txt'],
+      ['sleight-of-hand', 'sleight_of_hand', 'sleightofhand_txt'],
+      ['spot-hidden', 'spot_hidden', 'spothidden_txt'],
+    ] as const;
+    const text = serializeSecretDiceImport(
+      {
+        name: '공식 속성 테스트',
+        stats,
+        sanity,
+        skills: expectedBindings.map(([id]) => ({
+          id,
+          name: id,
+          base: 20,
+          occupation: 10,
+          interest: 0,
+          other: 0,
+          growth: 0,
+          checked: false,
+        })),
+        weapons: [],
+      },
+      expectedBindings.map(([id]) => `skill:${id}`),
+      'normal',
+    );
+    const json = JSON.parse(text.replace('[R20JE:COC7_IMPORT:1]\n', '').replace('\n[/R20JE]', ''));
+
+    expectedBindings.forEach(([id, valueAttribute, labelAttribute]) => {
+      expect(json.attributes[valueAttribute]).toEqual({ current: 30, max: '' });
+      expect(json.abilities[`${id}_비밀`]).toContain(`{{name=@{${labelAttribute}}}}`);
+      expect(json.abilities[`${id}_비밀`]).toContain(
+        `{{success=[[@{${valueAttribute}}]]}}`,
+      );
+
+      const obsoleteValueAttribute = labelAttribute.replace(/_txt$/, '');
+      if (obsoleteValueAttribute !== valueAttribute) {
+        expect(json.attributes[obsoleteValueAttribute]).toBeUndefined();
+      }
+    });
   });
 
   it('exports luck without touching the Roll20 attribute max column', () => {

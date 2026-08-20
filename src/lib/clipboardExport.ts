@@ -174,89 +174,82 @@ const secretDiceStatDefinitions: Array<{
   },
 ];
 
-const roll20SkillAttributeNames: Record<string, string> = {
-  accounting: 'accounting',
-  anthropology: 'anthropology',
-  appraise: 'appraise',
-  archaeology: 'archaeology',
-  charm: 'charm',
-  climb: 'climb',
-  'credit-rating': 'creditrating',
-  'cthulhu-mythos': 'cthulhumythos',
-  disguise: 'disguise',
-  dodge: 'dodge',
-  'drive-auto': 'driveauto',
-  'elec-repair': 'elecrepair',
-  'fast-talk': 'fasttalk',
-  'fighting-brawl': 'fighting_brawl',
-  'firearms-handgun': 'firearms_hg',
-  'firearms-rifle': 'firearms_rs',
-  'first-aid': 'firstaid',
-  history: 'history',
-  intimidate: 'intimidate',
-  jump: 'jump',
-  'language-own': 'language_own',
-  law: 'law',
-  'library-use': 'libraryuse',
-  listen: 'listen',
-  locksmith: 'locksmith',
-  'mechanical-repair': 'mechrepair',
-  medicine: 'medicine',
-  'natural-world': 'naturalworld',
-  navigate: 'navigate',
-  occult: 'occult',
-  persuade: 'persuade',
-  psychoanalysis: 'psychoanalysis',
-  ride: 'ride',
-  'sleight-of-hand': 'sleightofhand',
-  'spot-hidden': 'spothidden',
-  stealth: 'stealth',
-  swim: 'swim',
-  throw: 'throw',
-  track: 'track',
-};
+interface Roll20SkillBinding {
+  valueAttribute: string;
+  labelAttribute: string;
+}
 
-const roll20CocSheetSkillAttributeNames: Record<string, string> = {
-  accounting: 'accounting',
-  anthropology: 'anthropology',
-  appraise: 'appraise',
-  archaeology: 'archaeology',
-  charm: 'charm',
-  climb: 'climb',
-  'credit-rating': 'credit_rating',
-  'cthulhu-mythos': 'cthulhu_mythos',
-  disguise: 'disguise',
-  dodge: 'dodge',
-  'drive-auto': 'drive_auto',
-  'elec-repair': 'elec_repair',
-  'fast-talk': 'fast_talk',
-  'fighting-brawl': 'fighting_brawl',
-  'firearms-handgun': 'firearms_handgun',
-  'firearms-rifle': 'firearms_rifle',
-  'first-aid': 'first_aid',
-  history: 'history',
-  intimidate: 'intimidate',
-  jump: 'jump',
-  'language-own': 'language_own',
-  law: 'law',
-  'library-use': 'library_use',
-  listen: 'listen',
-  locksmith: 'locksmith',
-  'mechanical-repair': 'mech_repair',
-  medicine: 'medicine',
-  'natural-world': 'natural_world',
-  navigate: 'navigate',
-  occult: 'occult',
-  persuade: 'persuade',
-  psychoanalysis: 'psychoanalysis',
-  psychology: 'psychology',
-  ride: 'ride',
-  'sleight-of-hand': 'sleight_of_hand',
-  'spot-hidden': 'spot_hidden',
-  stealth: 'stealth',
-  swim: 'swim',
-  throw: 'throw',
-  track: 'track',
+const roll20Coc7SkillBindings: Record<string, Roll20SkillBinding> = {
+  accounting: { valueAttribute: 'accounting', labelAttribute: 'accounting_txt' },
+  anthropology: { valueAttribute: 'anthropology', labelAttribute: 'anthropology_txt' },
+  appraise: { valueAttribute: 'appraise', labelAttribute: 'appraise_txt' },
+  archaeology: { valueAttribute: 'archaeology', labelAttribute: 'archaeology_txt' },
+  charm: { valueAttribute: 'charm', labelAttribute: 'charm_txt' },
+  climb: { valueAttribute: 'climb', labelAttribute: 'climb_txt' },
+  'credit-rating': {
+    valueAttribute: 'credit_rating',
+    labelAttribute: 'creditrating_txt',
+  },
+  'cthulhu-mythos': {
+    valueAttribute: 'cthulhu_mythos',
+    labelAttribute: 'cthulhumythos_txt',
+  },
+  disguise: { valueAttribute: 'disguise', labelAttribute: 'disguise_txt' },
+  dodge: { valueAttribute: 'dodge', labelAttribute: 'dodge_txt' },
+  'drive-auto': { valueAttribute: 'drive_auto', labelAttribute: 'driveauto_txt' },
+  'elec-repair': { valueAttribute: 'elec_repair', labelAttribute: 'elecrepair_txt' },
+  'fast-talk': { valueAttribute: 'fast_talk', labelAttribute: 'fasttalk_txt' },
+  'fighting-brawl': {
+    valueAttribute: 'fighting_brawl',
+    labelAttribute: 'fighting_brawl_txt',
+  },
+  'firearms-handgun': {
+    valueAttribute: 'firearms_handgun',
+    labelAttribute: 'firearms_hg_txt',
+  },
+  'firearms-rifle': {
+    valueAttribute: 'firearms_rifle',
+    labelAttribute: 'firearms_rs_txt',
+  },
+  'first-aid': { valueAttribute: 'first_aid', labelAttribute: 'firstaid_txt' },
+  history: { valueAttribute: 'history', labelAttribute: 'history_txt' },
+  intimidate: { valueAttribute: 'intimidate', labelAttribute: 'intimidate_txt' },
+  jump: { valueAttribute: 'jump', labelAttribute: 'jump_txt' },
+  'language-own': {
+    valueAttribute: 'language_own',
+    labelAttribute: 'language_own_txt',
+  },
+  law: { valueAttribute: 'law', labelAttribute: 'law_txt' },
+  'library-use': { valueAttribute: 'library_use', labelAttribute: 'libraryuse_txt' },
+  listen: { valueAttribute: 'listen', labelAttribute: 'listen_txt' },
+  locksmith: { valueAttribute: 'locksmith', labelAttribute: 'locksmith_txt' },
+  'mechanical-repair': {
+    valueAttribute: 'mech_repair',
+    labelAttribute: 'mechrepair_txt',
+  },
+  medicine: { valueAttribute: 'medicine', labelAttribute: 'medicine_txt' },
+  'natural-world': {
+    valueAttribute: 'natural_world',
+    labelAttribute: 'naturalworld_txt',
+  },
+  navigate: { valueAttribute: 'navigate', labelAttribute: 'navigate_txt' },
+  occult: { valueAttribute: 'occult', labelAttribute: 'occult_txt' },
+  persuade: { valueAttribute: 'persuade', labelAttribute: 'persuade_txt' },
+  psychoanalysis: {
+    valueAttribute: 'psychoanalysis',
+    labelAttribute: 'psychoanalysis_txt',
+  },
+  psychology: { valueAttribute: 'psychology', labelAttribute: 'psychology_txt' },
+  ride: { valueAttribute: 'ride', labelAttribute: 'ride_txt' },
+  'sleight-of-hand': {
+    valueAttribute: 'sleight_of_hand',
+    labelAttribute: 'sleightofhand_txt',
+  },
+  'spot-hidden': { valueAttribute: 'spot_hidden', labelAttribute: 'spothidden_txt' },
+  stealth: { valueAttribute: 'stealth', labelAttribute: 'stealth_txt' },
+  swim: { valueAttribute: 'swim', labelAttribute: 'swim_txt' },
+  throw: { valueAttribute: 'throw', labelAttribute: 'throw_txt' },
+  track: { valueAttribute: 'track', labelAttribute: 'track_txt' },
 };
 
 export function buildCharacterClipboardPayload(
@@ -323,9 +316,9 @@ export function buildSecretDiceRollOptions(
   const skillOptions = sortSkillsByKoreanName(source.skills)
     .filter((skill) => !isSkillGroup(skill))
     .map((skill) => {
-      const roll20AttributeName = roll20SkillAttributeNames[skill.id];
-      const attributeName = roll20AttributeName
-        ? createUniqueAttributeName(roll20AttributeName, usedAttributeNames)
+      const roll20Binding = roll20Coc7SkillBindings[skill.id];
+      const attributeName = roll20Binding
+        ? createUniqueAttributeName(roll20Binding.valueAttribute, usedAttributeNames)
         : createUniqueAttributeName(createSkillAttributeName(skill.id), usedAttributeNames);
 
       return {
@@ -334,8 +327,8 @@ export function buildSecretDiceRollOptions(
         label: skill.name.trim() || '이름 없는 기능치',
         value: calculateSkillTotal(skill, source.stats),
         attributeName,
-        templateName: roll20AttributeName
-          ? `@{${roll20AttributeName}_txt}`
+        templateName: roll20Binding
+          ? `@{${roll20Binding.labelAttribute}}`
           : skill.name.trim() || '이름 없는 기능치',
       };
     });
@@ -453,10 +446,10 @@ function appendRoll20CocSheetSkills(
     .filter((skill) => !isSkillGroup(skill))
     .forEach((skill) => {
       const total = calculateSkillTotal(skill, stats);
-      const attributeName = roll20CocSheetSkillAttributeNames[skill.id];
+      const roll20Binding = roll20Coc7SkillBindings[skill.id];
 
-      if (attributeName) {
-        attributes[attributeName] = createRoll20Attribute(total);
+      if (roll20Binding) {
+        attributes[roll20Binding.valueAttribute] = createRoll20Attribute(total);
         return;
       }
 
