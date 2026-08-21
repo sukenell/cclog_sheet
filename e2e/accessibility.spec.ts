@@ -588,6 +588,28 @@ test.describe('accessibility smoke', () => {
 
   test('forced colors preserves focus and selected-state shape without decorative markers', async ({ page }) => {
     await page.emulateMedia({ forcedColors: 'active' });
+    const systemColors = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.cssText = [
+        'position:fixed',
+        'inset:auto',
+        'color:CanvasText',
+        'background:Canvas',
+        'border:1px solid ButtonText',
+        'outline:3px solid Highlight',
+        'forced-color-adjust:none',
+      ].join(';');
+      document.body.append(probe);
+      const style = getComputedStyle(probe);
+      const colors = {
+        buttonText: style.borderTopColor,
+        canvas: style.backgroundColor,
+        canvasText: style.color,
+        highlight: style.outlineColor,
+      };
+      probe.remove();
+      return colors;
+    });
     await page.getByRole('link', { name: '전투' }).click();
 
     const menuButton = page.getByRole('button', { name: '사이드바 닫기' });
@@ -595,12 +617,14 @@ test.describe('accessibility smoke', () => {
     const focusStyle = await menuButton.evaluate((element) => {
       const style = getComputedStyle(element);
       return {
+        color: style.outlineColor,
         style: style.outlineStyle,
         width: Number.parseFloat(style.outlineWidth),
       };
     });
     expect(focusStyle.width).toBeGreaterThanOrEqual(3);
     expect(focusStyle.style).toBe('solid');
+    expect(focusStyle.color).toBe(systemColors.highlight);
 
     const selectedTab = page.getByRole('tab', { name: '무기' });
     const pressedFilter = page.getByRole('button', { name: '근거리', pressed: true });
@@ -608,8 +632,11 @@ test.describe('accessibility smoke', () => {
       const selectedStyle = await selectedControl.evaluate((element) => {
         const style = getComputedStyle(element);
         return {
+          background: style.backgroundColor,
+          borderBottomColor: style.borderBottomColor,
           borderBottomStyle: style.borderBottomStyle,
           borderBottomWidth: Number.parseFloat(style.borderBottomWidth),
+          color: style.color,
           fontWeight: Number.parseInt(style.fontWeight, 10),
           markerAfter: getComputedStyle(element, '::after').content,
           markerBefore: getComputedStyle(element, '::before').content,
@@ -618,10 +645,46 @@ test.describe('accessibility smoke', () => {
 
       expect(selectedStyle.borderBottomWidth).toBeGreaterThanOrEqual(3);
       expect(selectedStyle.borderBottomStyle).toBe('solid');
+      expect(selectedStyle.borderBottomColor).toBe(systemColors.highlight);
+      expect(selectedStyle.background).toBe(systemColors.canvas);
+      expect(selectedStyle.color).toBe(systemColors.canvasText);
       expect(selectedStyle.fontWeight).toBeGreaterThanOrEqual(700);
       expect(['none', 'normal']).toContain(selectedStyle.markerBefore);
       expect(['none', 'normal']).toContain(selectedStyle.markerAfter);
     }
+
+    const systemSelect = page.getByRole('combobox', { name: '룰 선택' });
+    await systemSelect.selectOption('insan');
+    const passwordDialog = page.getByRole('dialog', { name: 'InSane 어빌리티 잠금' });
+    const passwordInput = passwordDialog.getByLabel(/룰북 구매확인 비밀번호/);
+    await passwordDialog.getByRole('button', { name: '취소' }).focus();
+    const [dialogBoundary, inputBoundary] = await Promise.all([
+      passwordDialog.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          background: style.backgroundColor,
+          borderColor: style.borderTopColor,
+          borderStyle: style.borderTopStyle,
+          borderWidth: Number.parseFloat(style.borderTopWidth),
+        };
+      }),
+      passwordInput.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          borderColor: style.borderTopColor,
+          borderStyle: style.borderTopStyle,
+          borderWidth: Number.parseFloat(style.borderTopWidth),
+        };
+      }),
+    ]);
+
+    expect(dialogBoundary.background).toBe(systemColors.canvas);
+    expect(dialogBoundary.borderColor).toBe(systemColors.buttonText);
+    expect(dialogBoundary.borderStyle).toBe('solid');
+    expect(dialogBoundary.borderWidth).toBeGreaterThanOrEqual(1);
+    expect(inputBoundary.borderColor).toBe(systemColors.buttonText);
+    expect(inputBoundary.borderStyle).toBe('solid');
+    expect(inputBoundary.borderWidth).toBeGreaterThanOrEqual(1);
   });
 
   test('reduced motion removes smooth scrolling and non-essential transitions', async ({ page }) => {
@@ -716,6 +779,116 @@ test.describe('accessibility smoke', () => {
     expect(labelStyle.whiteSpace).not.toBe('nowrap');
     expect(labelStyle.textOverflow).not.toBe('ellipsis');
     expect(labelStyle.overflow).not.toBe('hidden');
+  });
+
+  test('secret dice dialog keeps every core region inside its bounds', async ({ page }) => {
+    await page.getByRole('button', { name: '비밀 주사위 복사' }).click();
+    const dialog = page.getByRole('dialog', { name: '비밀 주사위 복사' });
+
+    const geometry = await dialog.evaluate((element) => {
+      const dialogRect = element.getBoundingClientRect();
+      const coreSelectors = [
+        '.secret-dice-header',
+        '.dialog-description',
+        '.secret-dice-controls',
+        '.secret-dice-option-groups',
+        '.secret-dice-group',
+        '.secret-dice-option',
+        '.secret-dice-actions',
+        '.secret-dice-actions button',
+      ];
+      const coreRegions = coreSelectors.flatMap((selector) =>
+        Array.from(element.querySelectorAll<HTMLElement>(selector)).map((region) => {
+          const rect = region.getBoundingClientRect();
+          return {
+            selector,
+            clientWidth: region.clientWidth,
+            scrollWidth: region.scrollWidth,
+            left: rect.left,
+            right: rect.right,
+          };
+        }),
+      );
+      const firstCheckboxRect = element
+        .querySelector<HTMLInputElement>('.secret-dice-option input')
+        ?.getBoundingClientRect();
+      const minWidthSelectors = [
+        '.secret-dice-header > div',
+        '.secret-dice-option-groups',
+        '.secret-dice-list',
+        '.secret-dice-option',
+        '.secret-dice-actions',
+      ];
+
+      return {
+        dialog: {
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          left: dialogRect.left,
+          right: dialogRect.right,
+        },
+        coreRegions,
+        firstCheckbox: firstCheckboxRect
+          ? { left: firstCheckboxRect.left, right: firstCheckboxRect.right }
+          : null,
+        minWidths: minWidthSelectors.flatMap((selector) =>
+          Array.from(element.querySelectorAll<HTMLElement>(selector)).map((region) => ({
+            selector,
+            minWidth: getComputedStyle(region).minWidth,
+          })),
+        ),
+        footerButtonStyles: Array.from(
+          element.querySelectorAll<HTMLButtonElement>('.secret-dice-actions button'),
+        ).map((button) => {
+          const style = getComputedStyle(button);
+          return {
+            minWidth: style.minWidth,
+            overflowWrap: style.overflowWrap,
+            whiteSpace: style.whiteSpace,
+          };
+        }),
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect.soft(geometry.dialog.scrollWidth, 'dialog horizontally overflows').toBeLessThanOrEqual(
+      geometry.dialog.clientWidth,
+    );
+    expect.soft(geometry.dialog.left).toBeGreaterThanOrEqual(0);
+    expect.soft(geometry.dialog.right).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect.soft(geometry.firstCheckbox).not.toBeNull();
+    expect.soft(geometry.firstCheckbox?.left).toBeGreaterThanOrEqual(geometry.dialog.left - 1);
+    expect.soft(geometry.firstCheckbox?.right).toBeLessThanOrEqual(geometry.dialog.right + 1);
+
+    for (const region of geometry.coreRegions) {
+      expect
+        .soft(region.scrollWidth, `${region.selector} horizontally overflows`)
+        .toBeLessThanOrEqual(region.clientWidth + 1);
+      expect
+        .soft(region.left, `${region.selector} starts outside the dialog`)
+        .toBeGreaterThanOrEqual(geometry.dialog.left - 1);
+      expect
+        .soft(region.right, `${region.selector} ends outside the dialog`)
+        .toBeLessThanOrEqual(geometry.dialog.right + 1);
+    }
+
+    for (const child of geometry.minWidths) {
+      expect(child.minWidth, `${child.selector} must be shrinkable`).toBe('0px');
+    }
+    for (const button of geometry.footerButtonStyles) {
+      expect(button.minWidth).toBe('0px');
+      expect(button.overflowWrap).toBe('anywhere');
+      expect(button.whiteSpace).toBe('normal');
+    }
+  });
+
+  test('non-table field actions keep a 44-pixel target', async ({ page }) => {
+    const addPortrait = page.locator('.field-label-row').getByRole('button', { name: '추가' });
+
+    await expect(addPortrait).toBeVisible();
+    expect(
+      await addPortrait.evaluate((element) => element.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(44);
   });
 
   test('text spacing overrides do not create document overflow or hide toolbar labels', async ({ page }) => {
