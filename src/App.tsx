@@ -19,7 +19,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   createInitialSkills,
   createSpecialtySkill,
@@ -415,6 +415,10 @@ function App() {
       const matchesCategory = skillCategory === '전체' || skill.category === skillCategory;
       return matchesSearch && matchesCategory;
     }),
+  );
+  const skillRowNumberById = useMemo(
+    () => new Map(sheet.skills.map((skill, index) => [skill.id, index + 1])),
+    [sheet.skills],
   );
   const skillColumns = useMemo(() => splitSkillsIntoColumns(filteredSkills), [filteredSkills]);
   const visibleWeapons = useMemo(
@@ -1105,7 +1109,7 @@ function App() {
               <FileInput size={18} />
               <span>로드</span>
             </button>
-            <input ref={importInputRef} className="sr-only" type="file" accept="application/json" onChange={importJson} />
+            <input ref={importInputRef} hidden type="file" accept="application/json" onChange={importJson} />
             <button
               type="button"
               className="icon-button"
@@ -1269,7 +1273,7 @@ function App() {
                             type="button"
                             className="icon-only danger"
                             onClick={() => removeStandingImage(index)}
-                            title="표정 이미지 삭제"
+                            aria-label={`표정 이미지 ${index + 1} 삭제`}
                           >
                             <X size={15} />
                           </button>
@@ -1414,8 +1418,14 @@ function App() {
             )}
             <div className="filter-row">
               <div className="search-field">
-                <Search size={17} />
-                <input value={skillSearch} placeholder="기능치 검색" onChange={(event) => setSkillSearch(event.target.value)} />
+                <Search size={17} aria-hidden="true" />
+                <label htmlFor="skill-search">기능치 검색</label>
+                <input
+                  id="skill-search"
+                  type="search"
+                  value={skillSearch}
+                  onChange={(event) => setSkillSearch(event.target.value)}
+                />
               </div>
               <div className="category-tabs">
                 {skillCategories.map((category) => (
@@ -1432,7 +1442,9 @@ function App() {
             </div>
             <div className="skill-table-mobile">
               <SkillTable
+                caption="기능치 목록 (모바일)"
                 skills={filteredSkills}
+                rowNumberById={skillRowNumberById}
                 stats={sheet.stats}
                 onUpdateSkill={updateSkill}
                 onRemoveSkill={removeSkill}
@@ -1448,7 +1460,9 @@ function App() {
               {skillColumns.map((skills, index) => (
                 <SkillTable
                   key={`skill-column-${index}`}
+                  caption={`기능치 목록 (${index === 0 ? '왼쪽' : '오른쪽'})`}
                   skills={skills}
+                  rowNumberById={skillRowNumberById}
                   stats={sheet.stats}
                   onUpdateSkill={updateSkill}
                   onRemoveSkill={removeSkill}
@@ -1517,39 +1531,48 @@ function App() {
                 ) : (
                   <div className="table-wrap">
                     <table className="weapon-table">
+                      <caption className="sr-only">{weaponCategoryLabels[weaponCategory]} 무기 목록</caption>
                       <thead>
                         {weaponCategory === 'melee' ? (
                           <tr>
-                            <th>무기</th>
-                            <th>기능치</th>
-                            <th>피해</th>
-                            <th aria-label="삭제" />
+                            <th scope="col">무기</th>
+                            <th scope="col">기능치</th>
+                            <th scope="col">피해</th>
+                            <th scope="col" aria-label="삭제" />
                           </tr>
                         ) : (
                           <tr>
-                            <th>무기</th>
-                            <th>기능치</th>
-                            <th>피해</th>
-                            <th>사거리</th>
-                            <th>공격 횟수</th>
-                            <th>탄환수</th>
-                            <th>고장</th>
-                            <th aria-label="삭제" />
+                            <th scope="col">무기</th>
+                            <th scope="col">기능치</th>
+                            <th scope="col">피해</th>
+                            <th scope="col">사거리</th>
+                            <th scope="col">공격 횟수</th>
+                            <th scope="col">탄환수</th>
+                            <th scope="col">고장</th>
+                            <th scope="col" aria-label="삭제" />
                           </tr>
                         )}
                       </thead>
                       <tbody>
-                        {visibleWeapons.map((weapon) => (
+                        {visibleWeapons.map((weapon, weaponIndex) => {
+                          const weaponContext =
+                            weapon.isDefault && weapon.name.trim()
+                              ? weapon.name.trim()
+                              : `${weaponCategoryLabels[weapon.category]} 무기 ${weaponIndex + 1}`;
+
+                          return (
                           <tr key={weapon.id}>
-                            <td>
+                            <th scope="row" aria-label={weaponContext}>
                               <input
+                                aria-label={`${weaponContext} 이름`}
                                 value={weapon.name}
                                 readOnly={weapon.isDefault}
                                 onChange={(event) => updateWeapon(weapon.id, 'name', event.target.value)}
                               />
-                            </td>
+                            </th>
                             <td>
                               <input
+                                aria-label={`${weaponContext} 기능치`}
                                 value={weapon.skill}
                                 readOnly={weapon.isDefault}
                                 onChange={(event) => updateWeapon(weapon.id, 'skill', event.target.value)}
@@ -1557,6 +1580,7 @@ function App() {
                             </td>
                             <td>
                               <input
+                                aria-label={`${weaponContext} 피해`}
                                 value={weapon.damage}
                                 readOnly={weapon.isDefault}
                                 onChange={(event) => updateWeapon(weapon.id, 'damage', event.target.value)}
@@ -1565,28 +1589,29 @@ function App() {
                             {weaponCategory !== 'melee' && (
                               <>
                                 <td>
-                                  <input value={weapon.range} onChange={(event) => updateWeapon(weapon.id, 'range', event.target.value)} />
+                                  <input aria-label={`${weaponContext} 사거리`} value={weapon.range} onChange={(event) => updateWeapon(weapon.id, 'range', event.target.value)} />
                                 </td>
                                 <td>
-                                  <input value={weapon.attacks} onChange={(event) => updateWeapon(weapon.id, 'attacks', event.target.value)} />
+                                  <input aria-label={`${weaponContext} 공격 횟수`} value={weapon.attacks} onChange={(event) => updateWeapon(weapon.id, 'attacks', event.target.value)} />
                                 </td>
                                 <td>
-                                  <input value={weapon.ammo} onChange={(event) => updateWeapon(weapon.id, 'ammo', event.target.value)} />
+                                  <input aria-label={`${weaponContext} 탄환수`} value={weapon.ammo} onChange={(event) => updateWeapon(weapon.id, 'ammo', event.target.value)} />
                                 </td>
                                 <td>
-                                  <input value={weapon.malfunction} onChange={(event) => updateWeapon(weapon.id, 'malfunction', event.target.value)} />
+                                  <input aria-label={`${weaponContext} 고장`} value={weapon.malfunction} onChange={(event) => updateWeapon(weapon.id, 'malfunction', event.target.value)} />
                                 </td>
                               </>
                             )}
                             <td>
                               {!weapon.isDefault && (
-                                <button type="button" className="icon-only danger" onClick={() => removeWeapon(weapon.id)} title="무기 삭제">
+                                <button type="button" className="icon-only danger" onClick={() => removeWeapon(weapon.id)} aria-label={`${weaponContext} 삭제`}>
                                   <Trash2 size={15} />
                                 </button>
                               )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1606,28 +1631,29 @@ function App() {
                 ) : (
                   <div className="table-wrap">
                     <table className="armor-table">
+                      <caption className="sr-only">방어구 목록</caption>
                       <thead>
                         <tr>
-                          <th>머리</th>
-                          <th>몸</th>
-                          <th>방어 데이터</th>
-                          <th aria-label="삭제" />
+                          <th scope="col">머리</th>
+                          <th scope="col">몸</th>
+                          <th scope="col">방어 데이터</th>
+                          <th scope="col" aria-label="삭제" />
                         </tr>
                       </thead>
                       <tbody>
-                        {sheet.armors.map((armor) => (
+                        {sheet.armors.map((armor, armorIndex) => (
                           <tr key={armor.id}>
+                            <th scope="row" aria-label={`방어구 ${armorIndex + 1}`}>
+                              <input aria-label={`방어구 ${armorIndex + 1} 머리`} value={armor.head} onChange={(event) => updateArmor(armor.id, 'head', event.target.value)} />
+                            </th>
                             <td>
-                              <input value={armor.head} onChange={(event) => updateArmor(armor.id, 'head', event.target.value)} />
+                              <input aria-label={`방어구 ${armorIndex + 1} 몸`} value={armor.body} onChange={(event) => updateArmor(armor.id, 'body', event.target.value)} />
                             </td>
                             <td>
-                              <input value={armor.body} onChange={(event) => updateArmor(armor.id, 'body', event.target.value)} />
+                              <input aria-label={`방어구 ${armorIndex + 1} 방어 데이터`} value={armor.defense} onChange={(event) => updateArmor(armor.id, 'defense', event.target.value)} />
                             </td>
                             <td>
-                              <input value={armor.defense} onChange={(event) => updateArmor(armor.id, 'defense', event.target.value)} />
-                            </td>
-                            <td>
-                              <button type="button" className="icon-only danger" onClick={() => removeArmor(armor.id)} title="방어구 삭제">
+                              <button type="button" className="icon-only danger" onClick={() => removeArmor(armor.id)} aria-label={`방어구 ${armorIndex + 1} 삭제`}>
                                 <Trash2 size={15} />
                               </button>
                             </td>
@@ -1652,37 +1678,42 @@ function App() {
                 ) : (
                   <div className="table-wrap">
                     <table className="spell-table">
+                      <caption className="sr-only">주문 목록</caption>
                       <thead>
                         <tr>
-                          <th>주문 이름</th>
-                          <th>비용</th>
-                          <th>시전시간</th>
-                          <th>설명</th>
-                          <th aria-label="삭제" />
+                          <th scope="col">주문 이름</th>
+                          <th scope="col">비용</th>
+                          <th scope="col">시전시간</th>
+                          <th scope="col">설명</th>
+                          <th scope="col" aria-label="삭제" />
                         </tr>
                       </thead>
                       <tbody>
-                        {sheet.spells.map((spell) => (
+                        {sheet.spells.map((spell, spellIndex) => {
+                          const spellContext = `주문 ${spellIndex + 1}`;
+
+                          return (
                           <tr key={spell.id}>
+                            <th scope="row" aria-label={spellContext}>
+                              <input aria-label={`${spellContext} 주문 이름`} value={spell.name} onChange={(event) => updateSpell(spell.id, 'name', event.target.value)} />
+                            </th>
                             <td>
-                              <input value={spell.name} onChange={(event) => updateSpell(spell.id, 'name', event.target.value)} />
+                              <input aria-label={`${spellContext} 비용`} value={spell.cost} onChange={(event) => updateSpell(spell.id, 'cost', event.target.value)} />
                             </td>
                             <td>
-                              <input value={spell.cost} onChange={(event) => updateSpell(spell.id, 'cost', event.target.value)} />
+                              <input aria-label={`${spellContext} 시전시간`} value={spell.castTime} onChange={(event) => updateSpell(spell.id, 'castTime', event.target.value)} />
                             </td>
                             <td>
-                              <input value={spell.castTime} onChange={(event) => updateSpell(spell.id, 'castTime', event.target.value)} />
+                              <textarea aria-label={`${spellContext} 설명`} value={spell.description} onChange={(event) => updateSpell(spell.id, 'description', event.target.value)} />
                             </td>
                             <td>
-                              <textarea value={spell.description} onChange={(event) => updateSpell(spell.id, 'description', event.target.value)} />
-                            </td>
-                            <td>
-                              <button type="button" className="icon-only danger" onClick={() => removeSpell(spell.id)} title="주문 삭제">
+                              <button type="button" className="icon-only danger" onClick={() => removeSpell(spell.id)} aria-label={`${spellContext} 삭제`}>
                                 <Trash2 size={15} />
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1727,14 +1758,19 @@ function App() {
           >
             <div className="scenario-list">
               {sheet.scenarios.length === 0 && !isScenarioDraftOpen && <p className="empty-line">기록된 세션이 없습니다.</p>}
-              {sheet.scenarios.map((scenario) => (
+              {sheet.scenarios.map((scenario, scenarioIndex) => (
                 <div className="scenario-item" key={scenario.id}>
                   <ScenarioSummary label="룰" value={scenario.rule || '-'} />
                   <ScenarioSummary label="제목" value={scenario.title || '제목 없음'} strong />
                   <ScenarioSummary label="참여자" value={scenario.keeper || '-'} />
                   <ScenarioSummary label="종류" value={scenario.result || '-'} />
                   <ScenarioSummary label="보상" value={scenario.reward || '-'} />
-                  <button type="button" className="icon-only danger" onClick={() => removeScenario(scenario.id)} title="세션 삭제">
+                  <button
+                    type="button"
+                    className="icon-only danger"
+                    onClick={() => removeScenario(scenario.id)}
+                    aria-label={`세션 ${scenarioIndex + 1} ${scenario.title.trim() || '제목 없음'} 삭제`}
+                  >
                     <Trash2 size={15} />
                   </button>
                 </div>
@@ -2501,10 +2537,10 @@ function InsaneSheetView({
             <TextField label="나이" value={sheet.basic.age} onChange={(value) => updateBasic('age', value)} />
             <TextField label="성별" value={sheet.basic.gender} onChange={(value) => updateBasic('gender', value)} />
             <ColorField label="캐릭터 색상" value={sheet.basic.color} onChange={(value) => updateBasic('color', value)} />
-            <div className="field insane-portrait-url-field wide">
+            <label className="field insane-portrait-url-field wide">
               <span>이미지 주소</span>
               <input value={sheet.basic.imageUrl} onChange={(event) => updateBasic('imageUrl', event.target.value)} />
-            </div>
+            </label>
             <div className="field standing-image-field wide">
               <div className="field-label-row">
                 <span>표정별 이미지</span>
@@ -2539,7 +2575,7 @@ function InsaneSheetView({
                         type="button"
                         className="icon-only danger"
                         onClick={() => removeInsaneStandingImage(index)}
-                        title="표정 이미지 삭제"
+                        aria-label={`인세인 표정 이미지 ${index + 1} 삭제`}
                       >
                         <X size={15} />
                       </button>
@@ -2626,8 +2662,8 @@ function InsaneSheetView({
               ))}
             </select>
           </label>
-          <label>
-            <span>공포심</span>
+          <div className="field insane-fear-field" role="group" aria-labelledby="insane-fear-label">
+            <span id="insane-fear-label">공포심</span>
             <div className="insane-fear-controls">
               <select
                 value=""
@@ -2658,18 +2694,20 @@ function InsaneSheetView({
                 }
               />
             </div>
-          </label>
+          </div>
           <button type="button" className="insane-roll-button" onClick={rollRandomInsaneSetup}>
             <Dice6 size={16} /> 랜덤 다이스
           </button>
         </div>
         <div className="table-wrap insane-specialty-wrap">
           <table className="insane-specialty-table">
+            <caption className="sr-only">인세인 특기 목록</caption>
             <thead>
               <tr>
                 {insaneSkillCategories.map((category) => (
                   <th
                     key={category.id}
+                    scope="col"
                     className={category.name === sheet.curiosity ? 'curiosity-gap-column' : undefined}
                   >
                     {category.name}
@@ -2693,9 +2731,10 @@ function InsaneSheetView({
 
                     return (
                       <td key={name} className={cellClassName || undefined}>
-                        <label className="insane-specialty-cell">
+                        <div className="insane-specialty-cell">
                           <input
                             type="checkbox"
+                            aria-label={`${category.name} ${name} 선택`}
                             checked={specialty.checked}
                             onChange={(event) => updateSpecialty(name, 'checked', event.target.checked)}
                           />
@@ -2705,10 +2744,10 @@ function InsaneSheetView({
                             min={5}
                             max={12}
                             value={target}
-                            aria-label={`${name} 목표치`}
+                            aria-label={`${category.name} ${name} 목표치`}
                             readOnly
                           />
-                        </label>
+                        </div>
                       </td>
                     );
                   })}
@@ -2777,11 +2816,12 @@ function InsaneSheetView({
               ))}
             </datalist>
           )}
-          {sheet.abilities.map((ability) => (
+          {sheet.abilities.map((ability, abilityIndex) => (
             <div className="scenario-item insane-ability-item" key={ability.id}>
               <label className="field">
                 <span>어빌리티명</span>
                 <input
+                  aria-label={`어빌리티 ${abilityIndex + 1} 어빌리티명`}
                   list={abilityPresetImportLocked ? undefined : 'insane-ability-presets'}
                   value={ability.name}
                   onChange={(event) => updateAbilityName(ability.id, event.target.value)}
@@ -2789,7 +2829,7 @@ function InsaneSheetView({
               </label>
               <label className="field">
                 <span>타입</span>
-                <select value={ability.type} onChange={(event) => updateAbility(ability.id, 'type', event.target.value)}>
+                <select aria-label={`어빌리티 ${abilityIndex + 1} 타입`} value={ability.type} onChange={(event) => updateAbility(ability.id, 'type', event.target.value)}>
                   <option value="">선택</option>
                   <option value="공격">공격</option>
                   <option value="서포트">서포트</option>
@@ -2800,6 +2840,7 @@ function InsaneSheetView({
                 <label className="field">
                   <span>특기</span>
                   <select
+                    aria-label={`어빌리티 ${abilityIndex + 1} 특기`}
                     value={ability.specialty}
                     onChange={(event) => updateAbility(ability.id, 'specialty', event.target.value)}
                   >
@@ -2812,11 +2853,11 @@ function InsaneSheetView({
                   </select>
                 </label>
               ) : (
-                <TextField label="특기" value={ability.specialty} onChange={(value) => updateAbility(ability.id, 'specialty', value)} />
+                <TextField label="특기" accessibleLabel={`어빌리티 ${abilityIndex + 1} 특기`} value={ability.specialty} onChange={(value) => updateAbility(ability.id, 'specialty', value)} />
               )}
-              <TextArea label="효과" value={ability.effect} onChange={(value) => updateAbility(ability.id, 'effect', value)} />
+              <TextArea label="효과" accessibleLabel={`어빌리티 ${abilityIndex + 1} 효과`} value={ability.effect} onChange={(value) => updateAbility(ability.id, 'effect', value)} />
               {!isDefaultInsaneAbility(ability) ? (
-                <button type="button" className="icon-only danger" onClick={() => removeAbility(ability.id)} title="어빌리티 삭제">
+                <button type="button" className="icon-only danger" onClick={() => removeAbility(ability.id)} aria-label={`어빌리티 ${abilityIndex + 1} 삭제`}>
                   <Trash2 size={15} />
                 </button>
               ) : (
@@ -2838,15 +2879,16 @@ function InsaneSheetView({
       >
         <div className="scenario-list">
           {sheet.relationships.length === 0 && <p className="empty-line">등록된 인물이 없습니다.</p>}
-          {sheet.relationships.map((relationship) => (
+          {sheet.relationships.map((relationship, relationshipIndex) => (
             <div className="scenario-item" key={relationship.id}>
-              <TextField label="인물란" value={relationship.name} onChange={(value) => updateRelationship(relationship.id, 'name', value)} />
-              <TextField label="거처" value={relationship.place} onChange={(value) => updateRelationship(relationship.id, 'place', value)} />
-              <TextField label="비밀" value={relationship.secret} onChange={(value) => updateRelationship(relationship.id, 'secret', value)} />
-              <TextField label="감정" value={relationship.emotion} onChange={(value) => updateRelationship(relationship.id, 'emotion', value)} />
+              <TextField label="인물란" accessibleLabel={`인물 ${relationshipIndex + 1} 인물란`} value={relationship.name} onChange={(value) => updateRelationship(relationship.id, 'name', value)} />
+              <TextField label="거처" accessibleLabel={`인물 ${relationshipIndex + 1} 거처`} value={relationship.place} onChange={(value) => updateRelationship(relationship.id, 'place', value)} />
+              <TextField label="비밀" accessibleLabel={`인물 ${relationshipIndex + 1} 비밀`} value={relationship.secret} onChange={(value) => updateRelationship(relationship.id, 'secret', value)} />
+              <TextField label="감정" accessibleLabel={`인물 ${relationshipIndex + 1} 감정`} value={relationship.emotion} onChange={(value) => updateRelationship(relationship.id, 'emotion', value)} />
               <label className="field">
                 <span>＋/－</span>
                 <select
+                  aria-label={`인물 ${relationshipIndex + 1} ＋/－ 감정 부호`}
                   value={relationship.emotionSign}
                   onChange={(event) => updateRelationship(relationship.id, 'emotionSign', event.target.value)}
                 >
@@ -2854,7 +2896,7 @@ function InsaneSheetView({
                   <option value="－">－</option>
                 </select>
               </label>
-              <button type="button" className="icon-only danger" onClick={() => removeRelationship(relationship.id)} title="인물 삭제">
+              <button type="button" className="icon-only danger" onClick={() => removeRelationship(relationship.id)} aria-label={`인물 ${relationshipIndex + 1} 삭제`}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -2873,14 +2915,14 @@ function InsaneSheetView({
       >
         <div className="scenario-list">
           {sheet.sessions.length === 0 && <p className="empty-line">기록된 세션이 없습니다.</p>}
-          {sheet.sessions.map((session) => (
+          {sheet.sessions.map((session, sessionIndex) => (
             <div className="scenario-item" key={session.id}>
-              <TextField label="날짜" value={session.date} onChange={(value) => updateSession(session.id, 'date', value)} />
-              <TextField label="시나리오명" value={session.title} onChange={(value) => updateSession(session.id, 'title', value)} />
-              <TextField label="PC번호" value={session.pcNumber} onChange={(value) => updateSession(session.id, 'pcNumber', value)} />
-              <TextField label="공적점" value={session.merit} onChange={(value) => updateSession(session.id, 'merit', value)} />
-              <TextField label="비고" value={session.note} onChange={(value) => updateSession(session.id, 'note', value)} />
-              <button type="button" className="icon-only danger" onClick={() => removeSession(session.id)} title="세션 삭제">
+              <TextField label="날짜" accessibleLabel={`세션 ${sessionIndex + 1} 날짜`} value={session.date} onChange={(value) => updateSession(session.id, 'date', value)} />
+              <TextField label="시나리오명" accessibleLabel={`세션 ${sessionIndex + 1} 시나리오명`} value={session.title} onChange={(value) => updateSession(session.id, 'title', value)} />
+              <TextField label="PC번호" accessibleLabel={`세션 ${sessionIndex + 1} PC번호`} value={session.pcNumber} onChange={(value) => updateSession(session.id, 'pcNumber', value)} />
+              <TextField label="공적점" accessibleLabel={`세션 ${sessionIndex + 1} 공적점`} value={session.merit} onChange={(value) => updateSession(session.id, 'merit', value)} />
+              <TextField label="비고" accessibleLabel={`세션 ${sessionIndex + 1} 비고`} value={session.note} onChange={(value) => updateSession(session.id, 'note', value)} />
+              <button type="button" className="icon-only danger" onClick={() => removeSession(session.id)} aria-label={`세션 ${sessionIndex + 1} 삭제`}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -2952,11 +2994,11 @@ function VitalField({
       <span>{label}</span>
       <label>
         현재
-        <input type="number" min={0} value={current} onChange={(event) => onCurrentChange(Number(event.target.value))} />
+        <input aria-label={`${label} 현재`} type="number" min={0} value={current} onChange={(event) => onCurrentChange(Number(event.target.value))} />
       </label>
       <label>
         최대
-        <input type="number" min={0} value={max} onChange={(event) => onMaxChange(Number(event.target.value))} />
+        <input aria-label={`${label} 최대`} type="number" min={0} value={max} onChange={(event) => onMaxChange(Number(event.target.value))} />
       </label>
       {note && <p className="insane-vital-note">{note}</p>}
       {checks && checks.length > 0 && (
@@ -2965,6 +3007,7 @@ function VitalField({
             <label key={check.label}>
               <input
                 type="checkbox"
+                aria-label={`${label} ${check.label}`}
                 checked={check.checked}
                 onChange={(event) => check.onChange(event.target.checked)}
               />
@@ -3060,6 +3103,7 @@ function SectionTitle({
 
 function TextField({
   label,
+  accessibleLabel,
   value,
   onChange,
   readOnly,
@@ -3067,6 +3111,7 @@ function TextField({
   wide,
 }: {
   label: string;
+  accessibleLabel?: string;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
@@ -3077,6 +3122,7 @@ function TextField({
     <label className={`field ${wide ? 'wide' : ''}`}>
       <span>{label}</span>
       <input
+        aria-label={accessibleLabel}
         value={value}
         readOnly={readOnly}
         placeholder={placeholder}
@@ -3095,13 +3141,16 @@ function ColorField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const inputId = useId();
   const pickerValue = normalizeColorPickerValue(value);
 
   return (
-    <label className="field color-field">
-      <span>{label}</span>
+    <div className="field color-field">
+      <label htmlFor={inputId}>
+        <span>{label}</span>
+      </label>
       <div className="color-field-control">
-        <input value={value} placeholder={colorPickerFallback} onChange={(event) => onChange(event.target.value)} />
+        <input id={inputId} value={value} placeholder={colorPickerFallback} onChange={(event) => onChange(event.target.value)} />
         <input
           type="color"
           aria-label={`${label} 선택`}
@@ -3109,7 +3158,7 @@ function ColorField({
           onChange={(event) => onChange(event.target.value)}
         />
       </div>
-    </label>
+    </div>
   );
 }
 
@@ -3119,12 +3168,14 @@ function normalizeColorPickerValue(value: string): string {
 
 function TextArea({
   label,
+  accessibleLabel,
   value,
   onChange,
   readOnly,
   tall,
 }: {
   label: string;
+  accessibleLabel?: string;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
@@ -3133,7 +3184,7 @@ function TextArea({
   return (
     <label className={`field textarea-field ${tall ? 'tall' : ''}`}>
       <span>{label}</span>
-      <textarea value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
+      <textarea aria-label={accessibleLabel} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -3174,7 +3225,15 @@ function StatInput({
     <label className="stat-card">
       <span>{code}</span>
       <strong>{label}</strong>
-      <input type="number" min={0} max={99} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
+      <input
+        type="number"
+        min={0}
+        max={99}
+        aria-label={`${code} ${label}`}
+        value={value}
+        readOnly={readOnly}
+        onChange={(event) => onChange(event.target.value)}
+      />
       <small>{edition === 'coc6' ? `판정 ${clampPercent(value * 5)}` : `${half(value)} / ${fifth(value)}`}</small>
     </label>
   );
@@ -3220,7 +3279,9 @@ function PairedMetric({
 }
 
 function SkillTable({
+  caption,
   skills,
+  rowNumberById,
   stats,
   onUpdateSkill,
   onRemoveSkill,
@@ -3231,7 +3292,9 @@ function SkillTable({
   onConfirmSpecialtySkill,
   onCancelSpecialtySkill,
 }: {
+  caption: string;
   skills: SheetSkill[];
+  rowNumberById: ReadonlyMap<string, number>;
   stats: InvestigatorStats;
   onUpdateSkill: (id: string, key: keyof SheetSkill, value: number | boolean | string) => void;
   onRemoveSkill: (id: string) => void;
@@ -3245,35 +3308,42 @@ function SkillTable({
   return (
     <div className="table-wrap skill-table-wrap">
       <table className="skill-table">
+        <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>
-            <th>성장</th>
-            <th>기능치명</th>
-            <th>기본</th>
-            <th>직업</th>
-            <th>관심</th>
-            <th>성장</th>
-            <th>기타</th>
-            <th>합계</th>
-            <th aria-label="삭제" />
+            <th scope="col">성장</th>
+            <th scope="col">기능치명</th>
+            <th scope="col">기본</th>
+            <th scope="col">직업</th>
+            <th scope="col">관심</th>
+            <th scope="col">성장</th>
+            <th scope="col">기타</th>
+            <th scope="col">합계</th>
+            <th scope="col" aria-label="삭제" />
           </tr>
         </thead>
         <tbody>
-          {skills.map((skill) => {
+          {skills.map((skill, skillIndex) => {
+            const skillName = skill.name.trim() || `기능치 ${skillIndex + 1}`;
+            const skillContext =
+              skill.custom && !skill.parentId
+                ? `사용자 기능치 ${rowNumberById.get(skill.id) ?? skillIndex + 1}`
+                : skillName;
+
             if (isSkillGroup(skill)) {
               const isAddingSpecialty = activeSkillGroupId === skill.id;
 
               return (
                 <tr key={skill.id} className="skill-group-row">
                   <td aria-hidden="true" />
-                  <td>
+                  <th scope="row" aria-label={skillName}>
                     <div className="skill-group-title">
                       <span>{skill.name}</span>
                       <button
                         type="button"
                         className="icon-only skill-group-add"
                         onClick={() => onStartSpecialtySkill(skill.id)}
-                        title={`${skill.name} 하위 기능치 추가`}
+                        aria-label={`${skillName} 하위 기능치 추가`}
                       >
                         <Plus size={14} />
                       </button>
@@ -3282,6 +3352,7 @@ function SkillTable({
                       <div className="skill-specialty-form">
                         <input
                           value={specialtyDraft}
+                          aria-label={`${skillName} 하위 기능치명`}
                           placeholder="하위 기능치명"
                           onChange={(event) => onSpecialtyDraftChange(event.target.value)}
                           onKeyDown={(event) => {
@@ -3299,7 +3370,7 @@ function SkillTable({
                           type="button"
                           className="icon-only"
                           onClick={() => onConfirmSpecialtySkill(skill)}
-                          title="하위 기능치 추가"
+                          aria-label={`${skillName} 하위 기능치 확인`}
                         >
                           <Check size={15} />
                         </button>
@@ -3307,13 +3378,13 @@ function SkillTable({
                           type="button"
                           className="icon-only"
                           onClick={onCancelSpecialtySkill}
-                          title="취소"
+                          aria-label={`${skillName} 하위 기능치 추가 취소`}
                         >
                           <X size={15} />
                         </button>
                       </div>
                     )}
-                  </td>
+                  </th>
                   <td className="skill-group-empty" colSpan={7} />
                 </tr>
               );
@@ -3327,34 +3398,39 @@ function SkillTable({
                 <td>
                   <input
                     type="checkbox"
+                    aria-label={`${skillContext} 성장 선택`}
                     checked={skill.checked}
                     onChange={(event) => onUpdateSkill(skill.id, 'checked', event.target.checked)}
                   />
                 </td>
-                <td>
+                <th scope="row" aria-label={skillContext}>
                   {skill.custom && !skill.parentId ? (
-                    <input value={skill.name} onChange={(event) => onUpdateSkill(skill.id, 'name', event.target.value)} />
+                    <input
+                      aria-label={`${skillContext} 기능치명`}
+                      value={skill.name}
+                      onChange={(event) => onUpdateSkill(skill.id, 'name', event.target.value)}
+                    />
                   ) : (
                     <span className={skill.parentId ? 'skill-child-name' : undefined}>{skill.name}</span>
                   )}
-                </td>
+                </th>
                 <td className="readonly-number">{base}</td>
                 <td>
-                  <NumberCell value={skill.occupation} onChange={(value) => onUpdateSkill(skill.id, 'occupation', value)} />
+                  <NumberCell label={`${skillContext} 직업`} value={skill.occupation} onChange={(value) => onUpdateSkill(skill.id, 'occupation', value)} />
                 </td>
                 <td>
-                  <NumberCell value={skill.interest} onChange={(value) => onUpdateSkill(skill.id, 'interest', value)} />
+                  <NumberCell label={`${skillContext} 관심`} value={skill.interest} onChange={(value) => onUpdateSkill(skill.id, 'interest', value)} />
                 </td>
                 <td>
-                  <NumberCell value={skill.growth} onChange={(value) => onUpdateSkill(skill.id, 'growth', value)} />
+                  <NumberCell label={`${skillContext} 성장`} value={skill.growth} onChange={(value) => onUpdateSkill(skill.id, 'growth', value)} />
                 </td>
                 <td>
-                  <NumberCell value={skill.other ?? 0} onChange={(value) => onUpdateSkill(skill.id, 'other', value)} />
+                  <NumberCell label={`${skillContext} 기타`} value={skill.other ?? 0} onChange={(value) => onUpdateSkill(skill.id, 'other', value)} />
                 </td>
                 <td className="total-cell">{total}</td>
                 <td>
                   {skill.custom && (
-                    <button type="button" className="icon-only danger" onClick={() => onRemoveSkill(skill.id)} title="기능치 삭제">
+                    <button type="button" className="icon-only danger" onClick={() => onRemoveSkill(skill.id)} aria-label={`${skillContext} 기능치 삭제`}>
                       <Trash2 size={15} />
                     </button>
                   )}
@@ -3452,10 +3528,12 @@ function BudgetPill({
 }
 
 function NumberCell({
+  label,
   value,
   onChange,
   disabled,
 }: {
+  label: string;
   value: number;
   onChange: (value: number) => void;
   disabled?: boolean;
@@ -3463,6 +3541,7 @@ function NumberCell({
   return (
     <input
       type="number"
+      aria-label={label}
       min={0}
       max={99}
       value={value}

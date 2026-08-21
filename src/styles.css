@@ -1172,7 +1172,16 @@ select:disabled {
   padding-left: 10px;
 }
 
+.search-field label {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
 .search-field input {
+  min-width: 0;
+  flex: 1;
   border: 0;
   box-shadow: none;
 }
@@ -1223,6 +1232,14 @@ th {
   white-space: nowrap;
 }
 
+tbody th[scope='row'] {
+  color: inherit;
+  background: transparent;
+  font-size: inherit;
+  font-weight: inherit;
+  white-space: normal;
+}
+
 td {
   color: #edf4ee;
 }
@@ -1260,6 +1277,10 @@ td {
 }
 
 .skill-group-row td {
+  background: rgb(25 29 36 / 0.92);
+}
+
+.skill-group-row th {
   background: rgb(25 29 36 / 0.92);
 }
 
