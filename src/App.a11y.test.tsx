@@ -309,7 +309,7 @@ describe('App accessibility smoke', () => {
     ).toEqual(initialWeaponNames);
     initialWeaponNames.forEach((names) => expect(new Set(names).size).toBe(2));
 
-    await user.click(screen.getByRole('button', { name: '주문' }));
+    await user.click(screen.getByRole('tab', { name: '주문' }));
     await user.click(screen.getByRole('button', { name: '주문 추가' }));
     await user.click(screen.getByRole('button', { name: '주문 추가' }));
     const spellTable = screen.getByRole('table', { name: '주문 목록' });
@@ -363,7 +363,7 @@ describe('App accessibility smoke', () => {
     expect(within(handgunTable).getByRole('textbox', { name: '권총 무기 1 탄환수' })).toBeInTheDocument();
     expect(within(handgunTable).getByRole('textbox', { name: '권총 무기 1 고장' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '방어구' }));
+    await user.click(screen.getByRole('tab', { name: '방어구' }));
     await user.click(screen.getByRole('button', { name: '방어구 추가' }));
     const armorTable = screen.getByRole('table', { name: '방어구 목록' });
     expect(within(armorTable).getByRole('rowheader', { name: '방어구 1' })).toBeInTheDocument();
@@ -372,7 +372,7 @@ describe('App accessibility smoke', () => {
     expect(within(armorTable).getByRole('textbox', { name: '방어구 1 방어 데이터' })).toBeInTheDocument();
     expect(within(armorTable).getByRole('button', { name: '방어구 1 삭제' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '주문' }));
+    await user.click(screen.getByRole('tab', { name: '주문' }));
     await user.click(screen.getByRole('button', { name: '주문 추가' }));
     const spellTable = screen.getByRole('table', { name: '주문 목록' });
     expect(within(spellTable).getByRole('rowheader', { name: '주문 1' })).toBeInTheDocument();
@@ -464,19 +464,91 @@ describe('App accessibility smoke', () => {
     getVisibleFormControls().forEach((control) => expect(control).toHaveAccessibleName());
   });
 
-  it('exposes combat mode controls with tab roles and names', async () => {
+  it('connects each combat tab to its labelled panel with a single roving tab stop', async () => {
     await renderOpenCocSheet();
 
-    const combatTabs = screen.getByRole('tablist', { name: '전투 분류' });
-    expect(
-      within(combatTabs).queryByRole('tab', { name: '무기', selected: true }),
-    ).not.toBeNull();
-    expect(
-      within(combatTabs).queryByRole('tab', { name: '방어구', selected: false }),
-    ).not.toBeNull();
-    expect(
-      within(combatTabs).queryByRole('tab', { name: '주문', selected: false }),
-    ).not.toBeNull();
+    const tablist = screen.getByRole('tablist', { name: '전투 분류' });
+    const tabs = within(tablist).getAllByRole('tab');
+
+    expect(tabs).toHaveLength(3);
+    expect(tablist.querySelectorAll(':scope > [role="tab"]')).toHaveLength(3);
+    expect(tabs.map((tab) => tab.id)).toEqual([
+      'combat-tab-weapons',
+      'combat-tab-armor',
+      'combat-tab-spells',
+    ]);
+    expect(tabs.filter((tab) => tab.getAttribute('aria-selected') === 'true')).toEqual([
+      tabs[0],
+    ]);
+    expect(tabs.filter((tab) => tab.tabIndex === 0)).toEqual([tabs[0]]);
+
+    for (const [index, tab] of tabs.entries()) {
+      const panelId = tab.getAttribute('aria-controls');
+      expect(panelId).toBe(`combat-panel-${['weapons', 'armor', 'spells'][index]}`);
+
+      const panel = document.getElementById(panelId ?? '');
+      expect(panel).not.toBeNull();
+      expect(panel).toHaveAttribute('role', 'tabpanel');
+      expect(panel).toHaveAttribute('aria-labelledby', tab.id);
+      expect(panel?.hasAttribute('hidden')).toBe(index !== 0);
+      if (index === 0) expect(panel).toHaveAccessibleName(tab.textContent ?? '');
+    }
+  });
+
+  it('moves combat selection and focus with arrow, Home, and End keys including wraparound', async () => {
+    const user = await renderOpenCocSheet();
+    const tablist = screen.getByRole('tablist', { name: '전투 분류' });
+    const weaponTab = within(tablist).getByRole('tab', { name: '무기' });
+    const armorTab = within(tablist).getByRole('tab', { name: '방어구' });
+    const spellTab = within(tablist).getByRole('tab', { name: '주문' });
+
+    weaponTab.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(armorTab).toHaveFocus();
+    expect(armorTab).toHaveAttribute('aria-selected', 'true');
+    expect(armorTab).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tabpanel', { name: '방어구' })).not.toHaveAttribute('hidden');
+
+    await user.keyboard('{End}');
+    expect(spellTab).toHaveFocus();
+    expect(spellTab).toHaveAttribute('aria-selected', 'true');
+
+    await user.keyboard('{Home}');
+    expect(weaponTab).toHaveFocus();
+    expect(weaponTab).toHaveAttribute('aria-selected', 'true');
+
+    await user.keyboard('{ArrowLeft}');
+    expect(spellTab).toHaveFocus();
+    expect(spellTab).toHaveAttribute('aria-selected', 'true');
+
+    await user.keyboard('{ArrowRight}');
+    expect(weaponTab).toHaveFocus();
+    expect(weaponTab).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('exposes skill and weapon filters as pressed button groups rather than tabs', async () => {
+    const user = await renderOpenCocSheet();
+    const skillFilters = screen.getByRole('group', { name: '기능치 유형' });
+    const allSkillsButton = within(skillFilters).getByRole('button', { name: '전체' });
+    const combatSkillsButton = within(skillFilters).getByRole('button', { name: '전투' });
+
+    expect(within(skillFilters).queryAllByRole('tab')).toEqual([]);
+    expect(allSkillsButton).toHaveAttribute('aria-pressed', 'true');
+    expect(combatSkillsButton).toHaveAttribute('aria-pressed', 'false');
+    await user.click(combatSkillsButton);
+    expect(allSkillsButton).toHaveAttribute('aria-pressed', 'false');
+    expect(combatSkillsButton).toHaveAttribute('aria-pressed', 'true');
+
+    const weaponFilters = screen.getByRole('group', { name: '무기 종류' });
+    const meleeButton = within(weaponFilters).getByRole('button', { name: '근거리' });
+    const handgunButton = within(weaponFilters).getByRole('button', { name: '권총' });
+
+    expect(within(weaponFilters).queryAllByRole('tab')).toEqual([]);
+    expect(meleeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(handgunButton).toHaveAttribute('aria-pressed', 'false');
+    await user.click(handgunButton);
+    expect(meleeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(handgunButton).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('has no serious or critical axe violations with every sheet section open', async () => {

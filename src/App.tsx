@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { ChangeEvent, MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import {
   createInitialSkills,
   createSpecialtySkill,
@@ -168,6 +169,11 @@ type SheetStateArchive = Partial<Omit<SheetState, 'weapons' | 'armors' | 'spells
 
 type CombatTab = 'weapons' | 'armor' | 'spells';
 type GameSystem = 'coc7' | 'coc6' | 'insan';
+const combatTabOptions: readonly { id: CombatTab; label: string }[] = [
+  { id: 'weapons', label: '무기' },
+  { id: 'armor', label: '방어구' },
+  { id: 'spells', label: '주문' },
+];
 const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
 const insaneStorageKey = 'cclog-sheet:insane:v1';
@@ -757,6 +763,36 @@ function App() {
         ? '성장 체크된 기능치가 없습니다.'
         : `${result.rolledCount}개 기능치를 굴려 ${result.growthResults.length}개 기능치가 성장했습니다.`,
     );
+  }
+
+  function handleCombatTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: CombatTab,
+  ) {
+    const currentIndex = combatTabOptions.findIndex(({ id }) => id === currentTab);
+    let nextIndex: number | null = null;
+
+    switch (event.key) {
+      case 'ArrowLeft':
+        nextIndex = (currentIndex - 1 + combatTabOptions.length) % combatTabOptions.length;
+        break;
+      case 'ArrowRight':
+        nextIndex = (currentIndex + 1) % combatTabOptions.length;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = combatTabOptions.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const nextTab = combatTabOptions[nextIndex];
+    setCombatTab(nextTab.id);
+    document.getElementById(`combat-tab-${nextTab.id}`)?.focus();
   }
 
   function updateWeapon(id: string, key: keyof CombatWeapon, value: string) {
@@ -1445,12 +1481,13 @@ function App() {
                   onChange={(event) => setSkillSearch(event.target.value)}
                 />
               </div>
-              <div className="category-tabs">
+              <div className="category-tabs" role="group" aria-label="기능치 유형">
                 {skillCategories.map((category) => (
                   <button
                     key={category}
                     type="button"
                     className={skillCategory === category ? 'active' : ''}
+                    aria-pressed={skillCategory === category}
                     onClick={() => setSkillCategory(category)}
                   >
                     {category}
@@ -1509,31 +1546,43 @@ function App() {
             onToggle={toggleSection}
           >
             <div className="combat-tabs" role="tablist" aria-label="전투 분류">
-              {([
-                ['weapons', '무기'],
-                ['armor', '방어구'],
-                ['spells', '주문'],
-              ] as [CombatTab, string][]).map(([tabId, label]) => (
+              {combatTabOptions.map(({ id: tabId, label }) => (
                 <button
                   key={tabId}
+                  id={`combat-tab-${tabId}`}
                   type="button"
+                  role="tab"
                   className={combatTab === tabId ? 'active' : ''}
+                  aria-selected={combatTab === tabId}
+                  aria-controls={`combat-panel-${tabId}`}
+                  tabIndex={combatTab === tabId ? 0 : -1}
                   onClick={() => setCombatTab(tabId)}
+                  onKeyDown={(event) => handleCombatTabKeyDown(event, tabId)}
                 >
                   {label}
                 </button>
               ))}
             </div>
 
-            {combatTab === 'weapons' && (
-              <div className="combat-pane">
+            <div
+              id="combat-panel-weapons"
+              className="combat-pane"
+              role="tabpanel"
+              aria-labelledby="combat-tab-weapons"
+              hidden={combatTab !== 'weapons'}
+            >
                 <div className="combat-pane-toolbar">
-                  <div className="category-tabs weapon-category-tabs" aria-label="무기 종류">
+                  <div
+                    className="category-tabs weapon-category-tabs"
+                    role="group"
+                    aria-label="무기 종류"
+                  >
                     {weaponCategories.map((category) => (
                       <button
                         key={category}
                         type="button"
                         className={weaponCategory === category ? 'active' : ''}
+                        aria-pressed={weaponCategory === category}
                         onClick={() => setWeaponCategory(category)}
                       >
                         {weaponCategoryLabels[category]}
@@ -1634,11 +1683,15 @@ function App() {
                     </table>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
 
-            {combatTab === 'armor' && (
-              <div className="combat-pane">
+            <div
+              id="combat-panel-armor"
+              className="combat-pane"
+              role="tabpanel"
+              aria-labelledby="combat-tab-armor"
+              hidden={combatTab !== 'armor'}
+            >
                 <div className="combat-pane-toolbar">
                   <button type="button" onClick={addArmor}>
                     <Plus size={16} /> 방어구 추가
@@ -1681,11 +1734,15 @@ function App() {
                     </table>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
 
-            {combatTab === 'spells' && (
-              <div className="combat-pane">
+            <div
+              id="combat-panel-spells"
+              className="combat-pane"
+              role="tabpanel"
+              aria-labelledby="combat-tab-spells"
+              hidden={combatTab !== 'spells'}
+            >
                 <div className="combat-pane-toolbar">
                   <button type="button" onClick={addSpell}>
                     <Plus size={16} /> 주문 추가
@@ -1736,8 +1793,7 @@ function App() {
                     </table>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </CollapsibleSection>
 
           <CollapsibleSection

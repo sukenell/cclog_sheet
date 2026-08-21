@@ -1217,10 +1217,12 @@ select:disabled {
   color: var(--muted);
 }
 
-.category-tabs button.active {
-  border-color: rgb(141 240 193 / 0.45);
-  background: rgb(104 200 112 / 0.16);
-  color: var(--mint);
+.category-tabs button[aria-pressed='true'] {
+  border-color: currentColor;
+  border-bottom: 3px solid currentColor;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
 }
 
 .table-wrap {
@@ -1403,10 +1405,12 @@ td {
   color: var(--muted);
 }
 
-.combat-tabs button.active {
-  border-color: rgb(141 240 193 / 0.45);
-  background: rgb(104 200 112 / 0.16);
-  color: var(--mint);
+.combat-tabs [role='tab'][aria-selected='true'] {
+  border-color: currentColor;
+  border-bottom: 3px solid currentColor;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
 }
 
 .combat-pane {
