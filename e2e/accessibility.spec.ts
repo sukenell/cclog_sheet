@@ -22,6 +22,32 @@ async function openSheet(page: Page) {
   await expect(page.getByRole('heading', { level: 1, name: '새로운 탐사자' })).toBeVisible();
 }
 
+async function openAllSheetSections(page: Page) {
+  const toggles = page.locator('main .panel .section-toggle');
+  const count = await toggles.count();
+
+  for (let index = 0; index < count; index += 1) {
+    const toggle = toggles.nth(index);
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') {
+      await toggle.click();
+    }
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  }
+
+  return count;
+}
+
+async function unlockInsaneSheet(page: Page) {
+  const systemSelect = page.getByRole('combobox', { name: '룰 선택' });
+  await systemSelect.selectOption('insan');
+
+  const dialog = page.getByRole('dialog', { name: 'InSane 어빌리티 잠금' });
+  await dialog.getByLabel(/룰북 구매확인 비밀번호/).fill('e2e-test-password');
+  await dialog.getByRole('button', { name: '확인' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(systemSelect).toHaveValue('insan');
+}
+
 async function focusWithKeyboard(page: Page, target: Locator) {
   const markerId = `focus-marker-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   await target.evaluate((element, id) => {
@@ -117,20 +143,41 @@ test.describe('accessibility smoke', () => {
     await openSheet(page);
   });
 
-  test('initial sheet has no serious or critical axe violations', async ({ page }) => {
-    const results = await new AxeBuilder({ page }).withTags(automatedWcagTags).analyze();
-    const seriousOrCritical = results.violations.filter(
+  test('fully expanded COC and InSane sheets have no serious or critical axe violations', async ({ page }) => {
+    expect(await openAllSheetSections(page)).toBe(7);
+    const cocResults = await new AxeBuilder({ page }).withTags(automatedWcagTags).analyze();
+    const cocSeriousOrCritical = cocResults.violations.filter(
       ({ impact }) => impact === 'serious' || impact === 'critical',
     );
+    expect(summarizeViolations(cocSeriousOrCritical)).toEqual([]);
 
-    expect(summarizeViolations(seriousOrCritical)).toEqual([]);
+    await unlockInsaneSheet(page);
+    expect(await openAllSheetSections(page)).toBe(8);
+    const insaneResults = await new AxeBuilder({ page }).withTags(automatedWcagTags).analyze();
+    const insaneSeriousOrCritical = insaneResults.violations.filter(
+      ({ impact }) => impact === 'serious' || impact === 'critical',
+    );
+    expect(summarizeViolations(insaneSeriousOrCritical)).toEqual([]);
   });
 
-  test('exposes the core page landmarks and named sheet controls', async ({ page }) => {
+  test('exposes landmarks, headings, named controls, and table context in both systems', async ({ page }) => {
     await expect(page.getByRole('main')).toBeVisible();
     await expect(page.getByRole('complementary', { name: '시트 섹션' })).toBeVisible();
     await expect(page.getByRole('button', { name: '사이드바 닫기' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: '룰 선택' })).toBeVisible();
+
+    await openAllSheetSections(page);
+    await expect(page.getByRole('heading', { level: 2, name: '기능치' })).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: '기능치 검색' })).toBeVisible();
+    await expect(page.getByRole('table', { name: /기능치 목록/ }).first()).toBeVisible();
+
+    await unlockInsaneSheet(page);
+    await openAllSheetSections(page);
+    await expect(
+      page.getByRole('heading', { level: 2, name: '봉마인 정보', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '이미지 주소' })).toBeVisible();
+    await expect(page.getByRole('table', { name: '인세인 특기 목록' })).toBeVisible();
   });
 
   test('starts keyboard navigation at the skip link and keeps closed navigation inert', async ({ page }) => {
@@ -142,6 +189,7 @@ test.describe('accessibility smoke', () => {
     const sidebarId = await sidebar.getAttribute('id');
     const closeButton = page.getByRole('button', { name: '사이드바 닫기' });
     await expect(closeButton).toHaveAttribute('aria-controls', sidebarId ?? '');
+    await expect(sidebar).not.toHaveAttribute('aria-hidden', 'true');
     await closeButton.click();
 
     await expect(sidebar).toHaveAttribute('inert', '');
@@ -153,6 +201,11 @@ test.describe('accessibility smoke', () => {
         document.querySelector('[aria-label="시트 섹션"]')?.contains(document.activeElement),
       ),
     ).toBe(false);
+
+    const openButton = page.getByRole('button', { name: '사이드바 열기' });
+    await openButton.click();
+    await expect(sidebar).not.toHaveAttribute('inert', '');
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'false');
   });
 
   test('section navigation opens and focuses its target below the sticky header', async ({ page }) => {
@@ -245,17 +298,14 @@ test.describe('accessibility smoke', () => {
     );
   });
 
-  test('reflows without document-level horizontal overflow in narrow and short viewports', async ({ page }) => {
-    await page.getByRole('link', { name: '기능치' }).click();
-    await expect(page.locator('#skills .section-toggle')).toHaveAttribute('aria-expanded', 'true');
+  test('reflows every COC and InSane section in narrow, short, and 200%-equivalent viewports', async ({ page }, testInfo) => {
+    expect(await openAllSheetSections(page)).toBe(7);
     const skillTableName =
       (page.viewportSize()?.width ?? 0) > 1120
         ? '기능치 목록 (왼쪽)'
         : '기능치 목록 (모바일)';
     await expect(page.getByRole('table', { name: skillTableName })).toBeVisible();
 
-    await page.getByRole('link', { name: '전투' }).click();
-    await expect(page.locator('#combat .section-toggle')).toHaveAttribute('aria-expanded', 'true');
     await page.getByRole('button', { name: '권총', pressed: false }).click();
     await page.getByRole('button', { name: '무기 추가' }).click();
 
@@ -304,6 +354,30 @@ test.describe('accessibility smoke', () => {
       expect(layout.combatTableRegion.scrollWidth).toBeGreaterThanOrEqual(
         layout.combatTableRegion.clientWidth,
       );
+    }
+
+    await unlockInsaneSheet(page);
+    expect(await openAllSheetSections(page)).toBe(8);
+    await expect(page.getByRole('table', { name: '인세인 특기 목록' })).toBeVisible();
+
+    const expectNoDocumentOverflow = async () => {
+      const dimensions = await page.evaluate(() => ({
+        bodyClientWidth: document.body.clientWidth,
+        bodyScrollWidth: document.body.scrollWidth,
+        documentClientWidth: document.documentElement.clientWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+      }));
+      expect(dimensions.documentScrollWidth).toBeLessThanOrEqual(dimensions.documentClientWidth);
+      expect(dimensions.bodyScrollWidth).toBeLessThanOrEqual(dimensions.bodyClientWidth);
+    };
+
+    await expectNoDocumentOverflow();
+
+    if (testInfo.project.name === 'desktop-1280x720') {
+      // A 1280 CSS-pixel layout viewed at 200% has an effective 640 CSS-pixel viewport.
+      await page.setViewportSize({ width: 640, height: 720 });
+      await expectNoDocumentOverflow();
+      await expect(page.getByLabel('시트 도구')).toBeVisible();
     }
   });
 
@@ -883,7 +957,18 @@ test.describe('accessibility smoke', () => {
   });
 
   test('secret dice options remain operable without overlapping the footer', async ({ page }) => {
-    await page.getByRole('button', { name: '비밀 주사위 복사' }).click();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (value: string) => {
+            document.documentElement.dataset.task9CopiedText = value;
+          },
+        },
+      });
+    });
+    const invoker = page.getByRole('button', { name: '비밀 주사위 복사' });
+    await invoker.click();
     const dialog = page.getByRole('dialog', { name: '비밀 주사위 복사' });
     const optionRegion = dialog.locator('.secret-dice-option-groups');
     const footer = dialog.locator('.secret-dice-actions');
@@ -945,6 +1030,34 @@ test.describe('accessibility smoke', () => {
     );
     await expect(optionRegion).toBeVisible();
     await expect(footer).toBeVisible();
+
+    const footerCopyButton = footer.getByRole('button', { name: '일반 주사위 복사' });
+    await footerCopyButton.focus();
+    await expect(footerCopyButton).toBeFocused();
+    const focusedButtonGeometry = await footerCopyButton.evaluate((element) => {
+      const buttonRect = element.getBoundingClientRect();
+      const dialogRect = element.closest('dialog')?.getBoundingClientRect();
+      return dialogRect
+        ? {
+            buttonBottom: buttonRect.bottom,
+            buttonTop: buttonRect.top,
+            dialogBottom: dialogRect.bottom,
+            dialogTop: dialogRect.top,
+          }
+        : null;
+    });
+    expect(focusedButtonGeometry).not.toBeNull();
+    expect(focusedButtonGeometry?.buttonTop).toBeGreaterThanOrEqual(
+      (focusedButtonGeometry?.dialogTop ?? 0) - 1,
+    );
+    expect(focusedButtonGeometry?.buttonBottom).toBeLessThanOrEqual(
+      (focusedButtonGeometry?.dialogBottom ?? 0) + 1,
+    );
+
+    await footerCopyButton.click({ timeout: 2_000 });
+    await expect(dialog).toBeHidden();
+    await expect(invoker).toBeFocused();
+    await expect(page.locator('html')).toHaveAttribute('data-task9-copied-text', /COC7_IMPORT/);
   });
 
   test('non-table field actions keep a 44-pixel target', async ({ page }) => {
@@ -967,7 +1080,7 @@ test.describe('accessibility smoke', () => {
         p { margin-bottom: 2em !important; }
       `,
     });
-    await page.getByRole('link', { name: '기능치' }).click();
+    await openAllSheetSections(page);
 
     const layout = await page.evaluate(() => {
       const toolbarLabels = Array.from(document.querySelectorAll('.toolbar .icon-button span'));

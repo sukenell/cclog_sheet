@@ -7,8 +7,30 @@ import axe, { type Result as AxeViolation } from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
+const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+const originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+const originalRevokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+const originalExecCommandDescriptor = Object.getOwnPropertyDescriptor(document, 'execCommand');
+
+function restoreOwnProperty(
+  target: object,
+  property: PropertyKey,
+  descriptor: PropertyDescriptor | undefined,
+) {
+  if (descriptor) {
+    Object.defineProperty(target, property, descriptor);
+  } else {
+    Reflect.deleteProperty(target, property);
+  }
+}
+
 afterEach(() => {
   window.history.replaceState(null, '', '/cclog_sheet/');
+  restoreOwnProperty(navigator, 'clipboard', originalClipboardDescriptor);
+  restoreOwnProperty(URL, 'createObjectURL', originalCreateObjectUrlDescriptor);
+  restoreOwnProperty(URL, 'revokeObjectURL', originalRevokeObjectUrlDescriptor);
+  restoreOwnProperty(document, 'execCommand', originalExecCommandDescriptor);
+  vi.restoreAllMocks();
 });
 
 const cocSectionNames = [
@@ -1028,6 +1050,21 @@ describe('App accessibility smoke', () => {
 
     expect(resetButton).toHaveFocus();
     frameSpy.mockRestore();
+  });
+
+  it('restores URL, clipboard, and execCommand descriptors after tests that replace them', () => {
+    expect(Object.getOwnPropertyDescriptor(navigator, 'clipboard')).toEqual(
+      originalClipboardDescriptor,
+    );
+    expect(Object.getOwnPropertyDescriptor(URL, 'createObjectURL')).toEqual(
+      originalCreateObjectUrlDescriptor,
+    );
+    expect(Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')).toEqual(
+      originalRevokeObjectUrlDescriptor,
+    );
+    expect(Object.getOwnPropertyDescriptor(document, 'execCommand')).toEqual(
+      originalExecCommandDescriptor,
+    );
   });
 
   it('moves focus through InSane repeated rows and announces the deleted item', async () => {
