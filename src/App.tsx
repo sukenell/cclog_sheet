@@ -323,6 +323,10 @@ function focusAfterRowRemoval(
   removedId: string,
 ) {
   const markerPrefix = `${rowKind}:`;
+  const removedMarker = `${markerPrefix}${removedId}`;
+  const focusOrigin =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const shouldRestoreFocus = focusOrigin?.dataset.rowFocus === removedMarker;
   const matchingMarkers = Array.from(
     document.querySelectorAll<HTMLElement>('[data-row-focus]'),
   ).filter((element) => element.dataset.rowFocus?.startsWith(markerPrefix));
@@ -332,25 +336,41 @@ function focusAfterRowRemoval(
     .filter((value): value is string => Boolean(value));
   const markerValues = [...new Set(renderedMarkerValues)];
   const fallbackMarkerValues = itemIds.map((id) => `${markerPrefix}${id}`);
-  const orderedMarkerValues = markerValues.includes(`${markerPrefix}${removedId}`)
+  const orderedMarkerValues = markerValues.includes(removedMarker)
     ? markerValues
     : fallbackMarkerValues;
-  const removedIndex = orderedMarkerValues.indexOf(`${markerPrefix}${removedId}`);
+  const removedIndex = orderedMarkerValues.indexOf(removedMarker);
   if (removedIndex < 0) return;
   const targetMarker =
     orderedMarkerValues[removedIndex + 1] ?? orderedMarkerValues[removedIndex - 1];
 
   window.requestAnimationFrame(() => {
+    if (
+      !shouldRestoreFocus ||
+      (document.activeElement !== focusOrigin && document.activeElement !== document.body)
+    ) {
+      return;
+    }
     const rowTarget = targetMarker ? findFocusMarker('rowFocus', targetMarker) : null;
     (rowTarget ?? findFocusMarker('addRow', rowKind))?.focus();
   });
 }
 
 function focusAfterIndexedRowRemoval(rowKind: string, rowCount: number, removedIndex: number) {
+  const focusOrigin =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const shouldRestoreFocus =
+    focusOrigin?.dataset.rowFocus === `${rowKind}:${removedIndex}`;
   const remainingCount = rowCount - 1;
   const targetIndex = remainingCount > 0 ? Math.min(removedIndex, remainingCount - 1) : null;
 
   window.requestAnimationFrame(() => {
+    if (
+      !shouldRestoreFocus ||
+      (document.activeElement !== focusOrigin && document.activeElement !== document.body)
+    ) {
+      return;
+    }
     const target =
       targetIndex === null
         ? findFocusMarker('addRow', rowKind)
@@ -870,18 +890,26 @@ function App() {
   }
 
   function removeSkill(id: string) {
-    const removableSkill = sheet.skills.find((skill) => skill.id === id && skill.custom);
+    const removableSkills = sheet.skills.filter(
+      (skill) => skill.custom && !isSkillGroup(skill),
+    );
+    const removedIndex = removableSkills.findIndex((skill) => skill.id === id);
+    const removableSkill = removableSkills[removedIndex];
     if (!removableSkill) return;
     focusAfterRowRemoval(
       'coc-skill',
-      sheet.skills.filter((skill) => skill.custom && !isSkillGroup(skill)).map((skill) => skill.id),
+      removableSkills.map((skill) => skill.id),
       id,
     );
     setSheet((current) => ({
       ...current,
       skills: current.skills.filter((skill) => skill.id !== id || !skill.custom),
     }));
-    announceToolbarMessage(`${removableSkill.name.trim() || '사용자 기능치'}을 삭제했습니다.`);
+    announceToolbarMessage(
+      removableSkill.name.trim()
+        ? `${removableSkill.name.trim()}을 삭제했습니다.`
+        : `${removedIndex + 1}번째 사용자 기능치를 삭제했습니다.`,
+    );
   }
 
   function rollStats() {
@@ -1140,6 +1168,9 @@ function App() {
       } catch {
         setImportError('로드 파일을 읽지 못했습니다.');
       }
+    };
+    reader.onerror = () => {
+      setImportError('로드 파일을 읽지 못했습니다.');
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -2632,12 +2663,14 @@ async function writeClipboardText(text: string): Promise<boolean> {
 function copyTextWithTextarea(text: string): boolean {
   const activeElement =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const modalHost = activeElement?.closest<HTMLDialogElement>('dialog:modal') ?? null;
+  const copyHost = modalHost ?? document.body;
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
   textarea.style.left = '-9999px';
-  document.body.appendChild(textarea);
+  copyHost.appendChild(textarea);
   textarea.focus();
   textarea.select();
   let copied = false;
@@ -2645,7 +2678,7 @@ function copyTextWithTextarea(text: string): boolean {
   try {
     copied = document.execCommand('copy');
   } finally {
-    document.body.removeChild(textarea);
+    copyHost.removeChild(textarea);
     if (activeElement?.isConnected) activeElement.focus();
   }
 

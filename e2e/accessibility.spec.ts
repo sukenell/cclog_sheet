@@ -343,4 +343,69 @@ test.describe('accessibility smoke', () => {
     await nameInput.fill('새 탐사자');
     await expect(page.getByRole('button', { name: '초기화 실행 취소' })).toBeHidden();
   });
+
+  test('clipboard fallback copies from the active modal top layer and restores focus', async ({
+    context,
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1280x720', 'System clipboard is tested once.');
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: new URL(page.url()).origin,
+    });
+    await page.evaluate(() => navigator.clipboard.writeText('clipboard sentinel'));
+    await page.evaluate(() => {
+      const originalExecCommand = document.execCommand.bind(document);
+      Object.defineProperty(navigator.clipboard, 'writeText', {
+        configurable: true,
+        value: () => Promise.reject(new DOMException('Forced fallback', 'NotAllowedError')),
+      });
+      document.execCommand = (commandId: string) => {
+        const fallback = document.activeElement;
+        document.documentElement.dataset.fallbackHost =
+          fallback?.parentElement?.matches('dialog:modal') ? 'modal' : 'body';
+        document.documentElement.dataset.fallbackHidden = String(
+          fallback instanceof HTMLTextAreaElement &&
+            fallback.readOnly &&
+            fallback.style.position === 'fixed' &&
+            fallback.style.left === '-9999px',
+        );
+        const copied = originalExecCommand(commandId);
+        queueMicrotask(() => {
+          const activeDialog = document.querySelector('dialog:modal');
+          document.documentElement.dataset.fallbackRemoved = String(
+            !document.querySelector('textarea[readonly][style*="-9999px"]'),
+          );
+          document.documentElement.dataset.fallbackFocus =
+            document.activeElement?.textContent?.trim() ?? '';
+          document.documentElement.dataset.fallbackDialogOpen = String(Boolean(activeDialog));
+        });
+        return copied;
+      };
+    });
+
+    const invoker = page.getByRole('button', { name: '비밀 주사위 복사' });
+    await invoker.click();
+    const dialog = page.getByRole('dialog', { name: '비밀 주사위 복사' });
+    const copyButton = dialog.getByRole('button', { name: '일반 주사위 복사' });
+    await copyButton.click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-fallback-host', 'modal');
+    await expect(page.locator('html')).toHaveAttribute('data-fallback-hidden', 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-fallback-removed', 'true');
+    await expect(page.locator('html')).toHaveAttribute(
+      'data-fallback-focus',
+      '일반 주사위 복사',
+    );
+    await expect(page.locator('html')).toHaveAttribute('data-fallback-dialog-open', 'true');
+    await expect(dialog).toBeHidden();
+    await expect(invoker).toBeFocused();
+    await expect(page.getByRole('status', { name: '작업 상태' })).toContainText(
+      '일반 비밀 주사위를 복사했습니다.',
+    );
+
+    const copiedText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copiedText).not.toBe('clipboard sentinel');
+    expect(copiedText).toContain('[R20JE:COC7_IMPORT:1]');
+    expect(copiedText).toContain('"character": "새로운 탐사자"');
+  });
 });

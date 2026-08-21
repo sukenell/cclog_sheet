@@ -727,6 +727,43 @@ describe('App accessibility smoke', () => {
     expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
       '시트를 불러왔습니다.',
     );
+
+    const taskStatus = screen.getByRole('status', { name: '작업 상태' });
+    const firstLoadMessage = taskStatus.firstChild;
+    fireEvent.change(importInput, {
+      target: {
+        files: [new File(['{"gameSystem":"insan"}'], 'valid.json', { type: 'application/json' })],
+      },
+    });
+    await waitFor(() => expect(taskStatus.firstChild).not.toBe(firstLoadMessage));
+    expect(taskStatus).toHaveTextContent('시트를 불러왔습니다.');
+  });
+
+  it('announces a FileReader failure through the import alert', async () => {
+    const readSpy = vi
+      .spyOn(FileReader.prototype, 'readAsText')
+      .mockImplementation(function (this: FileReader) {
+        this.onerror?.call(
+          this,
+          new ProgressEvent('error') as ProgressEvent<FileReader>,
+        );
+      });
+    render(<App />);
+    const importInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!importInput) throw new Error('Missing JSON import input');
+
+    await act(async () => {
+      fireEvent.change(importInput, {
+        target: { files: [new File(['unreadable'], 'unreadable.json')] },
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert', { name: '로드 오류' })).toHaveTextContent(
+        '로드 파일을 읽지 못했습니다.',
+      ),
+    );
+    readSpy.mockRestore();
   });
 
   it('keeps the password dialog open and exposes an alert-linked invalid field on failure', async () => {
@@ -794,15 +831,52 @@ describe('App accessibility smoke', () => {
     expect(budget?.closest('[role="status"], [role="alert"]')).toBeNull();
   });
 
+  it('re-announces repeated dice, copy, and delete completions', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    const user = await renderOpenCocSheet();
+    const taskStatus = screen.getByRole('status', { name: '작업 상태' });
+
+    const randomDice = screen.getByRole('button', { name: '랜덤 다이스' });
+    await user.click(randomDice);
+    const firstDiceMessage = taskStatus.firstChild;
+    await user.click(randomDice);
+    expect(taskStatus).toHaveTextContent('랜덤 다이스 결과를 적용했습니다.');
+    expect(taskStatus.firstChild).not.toBe(firstDiceMessage);
+
+    const copy = screen.getByRole('button', { name: '코코포 팔레트 복사' });
+    await user.click(copy);
+    await waitFor(() => expect(taskStatus).toHaveTextContent('코코포 팔레트를 복사했습니다.'));
+    const firstCopyMessage = taskStatus.firstChild;
+    await user.click(copy);
+    await waitFor(() => expect(taskStatus.firstChild).not.toBe(firstCopyMessage));
+
+    await user.click(screen.getByRole('tab', { name: '방어구' }));
+    const addArmor = screen.getByRole('button', { name: '방어구 추가' });
+    await user.click(addArmor);
+    await user.click(addArmor);
+    await user.click(screen.getByRole('button', { name: '방어구 1 삭제' }));
+    const firstDeleteMessage = taskStatus.firstChild;
+    await user.click(screen.getByRole('button', { name: '방어구 1 삭제' }));
+    expect(taskStatus).toHaveTextContent('방어구 1을 삭제했습니다.');
+    expect(taskStatus.firstChild).not.toBe(firstDeleteMessage);
+  });
+
   it('restores focus after clipboard fallback and reports the completed copy', async () => {
     const user = userEvent.setup();
+    let fallbackHost: HTMLElement | null = null;
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
     });
     Object.defineProperty(document, 'execCommand', {
       configurable: true,
-      value: vi.fn(() => true),
+      value: vi.fn(() => {
+        fallbackHost = document.activeElement?.parentElement ?? null;
+        return true;
+      }),
     });
     render(<App />);
 
@@ -814,6 +888,7 @@ describe('App accessibility smoke', () => {
       '코코포 팔레트를 복사했습니다.',
     );
     expect(document.querySelector('textarea[readonly]')).toBeNull();
+    expect(fallbackHost).toBe(document.body);
   });
 
   it('does not announce copy completion when the fallback reports failure', async () => {
@@ -909,6 +984,46 @@ describe('App accessibility smoke', () => {
     expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
       '방어구 1을 삭제했습니다.',
     );
+  });
+
+  it('announces stable row context when a blank custom skill is deleted', async () => {
+    const user = await renderOpenCocSheet();
+    await user.click(screen.getAllByRole('button', { name: '기능치 추가' })[0]);
+    const skillTable = screen.getByRole('table', { name: '기능치 목록 (모바일)' });
+    const nameInput = within(skillTable).getByDisplayValue('새 기능치');
+    const skillRow = nameInput.closest('tr');
+    if (!skillRow) throw new Error('Missing custom skill row');
+    await user.clear(nameInput);
+
+    await user.click(within(skillRow).getByRole('button', { name: /기능치 삭제$/ }));
+
+    expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+      '1번째 사용자 기능치를 삭제했습니다.',
+    );
+  });
+
+  it('does not steal focus when it moves before a scheduled deletion restore', async () => {
+    const scheduledFrames: FrameRequestCallback[] = [];
+    const frameSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        scheduledFrames.push(callback);
+        return scheduledFrames.length;
+      });
+    const user = await renderOpenCocSheet();
+    await user.click(screen.getByRole('tab', { name: '방어구' }));
+    await user.click(screen.getByRole('button', { name: '방어구 추가' }));
+    await user.click(screen.getByRole('button', { name: '방어구 추가' }));
+    const deleteButton = screen.getByRole('button', { name: '방어구 1 삭제' });
+    deleteButton.focus();
+
+    fireEvent.click(deleteButton);
+    const resetButton = screen.getByRole('button', { name: '초기화' });
+    resetButton.focus();
+    act(() => scheduledFrames.splice(0).forEach((callback) => callback(0)));
+
+    expect(resetButton).toHaveFocus();
+    frameSpy.mockRestore();
   });
 
   it('moves focus through InSane repeated rows and announces the deleted item', async () => {
