@@ -28,7 +28,6 @@ html {
 
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
   background:
     radial-gradient(circle at top left, rgb(104 200 112 / 0.14), transparent 28rem),
@@ -114,6 +113,24 @@ select:disabled {
   transition: grid-template-columns 160ms ease;
 }
 
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: 7px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 800;
+  text-decoration: none;
+  transform: translateY(calc(-100% - 16px));
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 .app-shell.sidebar-collapsed {
   grid-template-columns: 0 1fr;
 }
@@ -127,7 +144,8 @@ select:disabled {
   background: rgb(18 20 25 / 0.88);
   backdrop-filter: blur(18px);
   padding: 18px 16px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   transition:
     opacity 140ms ease,
     padding 160ms ease,
@@ -643,6 +661,7 @@ select:disabled {
 
 .panel {
   min-width: 0;
+  scroll-margin-top: 96px;
   border: 1px solid rgb(255 255 255 / 0.11);
   border-radius: 8px;
   background: rgb(36 39 46 / 0.92);

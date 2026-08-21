@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import './test/setup';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe, { type Result as AxeViolation } from 'axe-core';
 import { describe, expect, it } from 'vitest';
@@ -116,6 +116,62 @@ describe('App accessibility smoke', () => {
 
     expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: '새로운 탐사자' })).toBeInTheDocument();
+  });
+
+  it('starts keyboard navigation with a skip link targeting the focusable main landmark', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.tab();
+
+    const skipLink = screen.getByRole('link', { name: '본문으로 바로가기' });
+    expect(skipLink).toHaveFocus();
+    expect(skipLink).toHaveAttribute('href', '#main-content');
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('makes the closed sidebar inert and removes its descendants from keyboard navigation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const sidebar = screen.getByRole('complementary', { name: '시트 섹션' });
+    const menuButton = screen.getByRole('button', { name: '사이드바 닫기' });
+    const sidebarId = sidebar.id;
+
+    expect(sidebarId).not.toBe('');
+    expect(menuButton).toHaveAttribute('aria-controls', sidebarId);
+
+    await user.click(menuButton);
+
+    expect(sidebar).toHaveAttribute('inert');
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+
+    await user.tab();
+    expect(document.activeElement).not.toBe(
+      sidebar.querySelector('[tabindex], a, button, input, select, textarea'),
+    );
+    expect(sidebar.contains(document.activeElement)).toBe(false);
+  });
+
+  it('opens and focuses a requested sheet section while keeping the URL hash in sync', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '/cclog_sheet/');
+    render(<App />);
+
+    const memoToggle = screen
+      .getAllByRole('button', { name: '메모' })
+      .find((button) => button.hasAttribute('aria-expanded'));
+    if (!memoToggle) throw new Error('Missing memo disclosure button');
+    expect(memoToggle).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(screen.getByRole('link', { name: '메모' }));
+
+    await waitFor(() => {
+      expect(memoToggle).toHaveAttribute('aria-expanded', 'true');
+      expect(memoToggle).toHaveFocus();
+    });
+    expect(window.location.hash).toBe('#memo');
   });
 
   it('exposes the skill search through its visible label', async () => {

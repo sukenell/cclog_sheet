@@ -545,8 +545,15 @@ function App() {
     setActivePage(page);
 
     if (page === 'sheet' && sectionId) {
+      setSectionOpen((current) =>
+        current[sectionId] ? current : { ...current, [sectionId]: true },
+      );
       window.requestAnimationFrame(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ block: 'start' });
+        const targetSection = document.getElementById(sectionId);
+        targetSection?.scrollIntoView({ block: 'start' });
+        targetSection
+          ?.querySelector<HTMLButtonElement>('.section-toggle')
+          ?.focus({ preventScroll: true });
       });
     }
   }
@@ -1013,7 +1020,17 @@ function App() {
 
   return (
     <div className={`app-shell ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-      <aside className="sidebar" aria-label="시트 섹션" aria-hidden={!isSidebarOpen}>
+      <a className="skip-link" href="#main-content">
+        본문으로 바로가기
+      </a>
+      <aside
+        className="sidebar"
+        id="sheet-sidebar"
+        aria-label="시트 섹션"
+        aria-hidden={!isSidebarOpen}
+        // React 18 needs the serialized HTML attribute while @types/react models inert as boolean.
+        inert={(isSidebarOpen ? undefined : '') as never}
+      >
         <div className="brand">
           <div className="brand-mark">{brandMark}</div>
           <div className="brand-copy">
@@ -1071,7 +1088,7 @@ function App() {
         </nav>
       </aside>
 
-      <main className="sheet-main">
+      <main className="sheet-main" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div className="topbar-title">
             <button
@@ -1079,6 +1096,7 @@ function App() {
               className="menu-toggle"
               aria-label={isSidebarOpen ? '사이드바 닫기' : '사이드바 열기'}
               aria-expanded={isSidebarOpen}
+              aria-controls="sheet-sidebar"
               onClick={toggleSidebar}
             >
               <Menu size={21} />
