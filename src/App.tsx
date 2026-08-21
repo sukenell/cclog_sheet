@@ -269,8 +269,8 @@ const usageGuideSections = [
       <>
         시트를 오픈한 채, 붙여넣기 한 데이터를 붙여넣기 합니다. roll20 무료유저도
         사용가능합니다. 해당{' '}
-        <a href={r20JsonExporterUrl} target="_blank" rel="noreferrer">
-          확장 프로그램
+        <a href={r20JsonExporterUrl} target="_blank" rel="noopener noreferrer">
+          R20 JSONExporter 확장 프로그램(새 창)
         </a>
         과 연동해서 사용합니다.
       </>

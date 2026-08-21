@@ -170,7 +170,7 @@ describe('topbar archive controls', () => {
     expect(source).not.toContain('기능치와 특성치를 입력후, \'팔레트 복사\'');
   });
 
-  it('links the secret dice extension text to the Chrome Web Store listing', () => {
+  it('names every external link by destination and visibly warns that it opens a new window', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     const secretDiceGuideStart = source.indexOf("title: '3.비밀 주사위 복사'");
     const nextGuideStart = source.indexOf("title: '4.어빌리티 자동화(인세인)'", secretDiceGuideStart);
@@ -181,8 +181,9 @@ describe('topbar archive controls', () => {
     );
     expect(secretDiceGuideBlock).toContain('href={r20JsonExporterUrl}');
     expect(secretDiceGuideBlock).toContain('target="_blank"');
-    expect(secretDiceGuideBlock).toContain('rel="noreferrer"');
-    expect(secretDiceGuideBlock).toContain('확장 프로그램');
+    expect(secretDiceGuideBlock).toContain('rel="noopener noreferrer"');
+    expect(secretDiceGuideBlock).toContain('R20 JSONExporter 확장 프로그램(새 창)');
+    expect(source.match(/target="_blank"/g)).toHaveLength(1);
   });
 
   it('keeps usage guide image assets together in the public usage-guide directory', () => {
