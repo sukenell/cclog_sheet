@@ -31,4 +31,24 @@ describe('LiveMessage', () => {
     expect(screen.getByRole('status')).toBe(liveRegion);
     expect(liveRegion).toBeEmptyDOMElement();
   });
+
+  it('replaces the message content when the same announcement is triggered again', () => {
+    const { rerender } = render(
+      <LiveMessage message="Copied." announcementKey={1} />,
+    );
+    const liveRegion = screen.getByRole('status');
+    const firstContent = liveRegion.firstChild;
+
+    rerender(<LiveMessage message="Copied." announcementKey={2} />);
+
+    expect(screen.getByRole('status')).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent('Copied.');
+    expect(liveRegion.firstChild).not.toBe(firstContent);
+  });
+
+  it('renders numeric zero as a valid message', () => {
+    render(<LiveMessage message={0} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('0');
+  });
 });

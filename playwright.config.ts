@@ -15,6 +15,9 @@ export default defineConfig({
     command: `npm run dev -- --port ${port} --strictPort`,
     url: appUrl,
     reuseExistingServer: false,
+    env: {
+      VITE_INSANE_ABILITY_PASSWORD: 'e2e-test-password',
+    },
   },
   projects: [
     {

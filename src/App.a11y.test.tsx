@@ -4,7 +4,7 @@ import './test/setup';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe, { type Result as AxeViolation } from 'axe-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 const cocSectionNames = [
@@ -688,6 +688,250 @@ describe('App accessibility smoke', () => {
 
     await user.click(screen.getByRole('button', { name: '초기화 실행 취소' }));
     expect(nameInput).toHaveValue('되돌릴 봉마인');
+  });
+
+  it('announces an invalid import as an alert beside Load without replacing the growth result', async () => {
+    const user = await renderOpenCocSheet();
+
+    await user.click(screen.getByRole('button', { name: /^성장 굴림/ }));
+    const growthStatus = screen.getByRole('status', { name: '성장 결과' });
+    expect(growthStatus).toHaveTextContent('성장 체크된 기능치가 없습니다.');
+
+    const importInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!importInput) throw new Error('Missing JSON import input');
+    fireEvent.change(importInput, {
+      target: { files: [new File(['not-json'], 'broken.json', { type: 'application/json' })] },
+    });
+
+    const alert = screen.getByRole('alert', { name: '로드 오류' });
+    await waitFor(() => expect(alert).toHaveTextContent('로드 파일을 읽지 못했습니다.'));
+    expect(growthStatus).toHaveTextContent('성장 체크된 기능치가 없습니다.');
+
+    await user.click(screen.getByRole('button', { name: '로드' }));
+    expect(alert).toBeEmptyDOMElement();
+
+    fireEvent.change(importInput, {
+      target: {
+        files: [new File(['{"gameSystem":"insan"}'], 'valid.json', { type: 'application/json' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(alert).toBeEmptyDOMElement();
+      expect(screen.getByRole('combobox', { name: '룰 선택' })).toHaveValue('insan');
+      expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+        '시트를 불러왔습니다.',
+      );
+    });
+    await act(async () => Promise.resolve());
+    expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+      '시트를 불러왔습니다.',
+    );
+  });
+
+  it('keeps the password dialog open and exposes an alert-linked invalid field on failure', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '룰 선택' }), 'insan');
+    const dialog = screen.getByRole('dialog', { name: 'InSane 어빌리티 잠금' });
+    const passwordInput = within(dialog).getByLabelText(/룰북 구매확인 비밀번호/);
+    await user.type(passwordInput, 'incorrect');
+    await user.click(within(dialog).getByRole('button', { name: '확인' }));
+
+    expect(dialog).toHaveAttribute('open');
+    expect(passwordInput).toHaveAttribute('aria-invalid', 'true');
+    const errorId = passwordInput.getAttribute('aria-errormessage');
+    expect(errorId).toBeTruthy();
+    const alert = within(dialog).getByRole('alert');
+    expect(alert).toHaveAttribute('id', errorId);
+    expect(alert).toHaveTextContent('비밀번호가 일치하지 않습니다.');
+    const firstPasswordError = alert.firstChild;
+
+    await user.click(within(dialog).getByRole('button', { name: '확인' }));
+    expect(alert.firstChild).not.toBe(firstPasswordError);
+
+    await user.type(passwordInput, '1');
+    expect(passwordInput).not.toHaveAttribute('aria-invalid', 'true');
+    expect(passwordInput).not.toHaveAttribute('aria-errormessage');
+    expect(alert).toBeEmptyDOMElement();
+  });
+
+  it('announces repeated completed actions through a persistent polite live region', async () => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:test'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const user = await renderOpenCocSheet();
+
+    const taskStatus = screen.getByRole('status', { name: '작업 상태' });
+    const growthStatus = screen.getByRole('status', { name: '성장 결과' });
+    expect(growthStatus).toBeEmptyDOMElement();
+    const save = async () => {
+      await user.click(screen.getByRole('button', { name: '세이브' }));
+      await user.click(within(screen.getByRole('dialog', { name: 'COC 세이브' })).getByRole('button', { name: '전체 세이브' }));
+    };
+
+    await save();
+    expect(taskStatus).toHaveTextContent('시트를 저장했습니다.');
+    const firstAnnouncement = taskStatus.firstChild;
+    await save();
+    expect(taskStatus).toHaveTextContent('시트를 저장했습니다.');
+    expect(taskStatus.firstChild).not.toBe(firstAnnouncement);
+
+    await user.click(screen.getByRole('button', { name: /^성장 굴림/ }));
+    const firstGrowthAnnouncement = growthStatus.firstChild;
+    await user.click(screen.getByRole('button', { name: /^성장 굴림/ }));
+    expect(growthStatus.firstChild).not.toBe(firstGrowthAnnouncement);
+
+    const budget = document.querySelector('.budget-pill');
+    expect(budget).not.toBeNull();
+    expect(budget?.closest('[role="status"], [role="alert"]')).toBeNull();
+  });
+
+  it('restores focus after clipboard fallback and reports the completed copy', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
+    render(<App />);
+
+    const copyButton = screen.getByRole('button', { name: '코코포 팔레트 복사' });
+    await user.click(copyButton);
+
+    await waitFor(() => expect(copyButton).toHaveFocus());
+    expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+      '코코포 팔레트를 복사했습니다.',
+    );
+    expect(document.querySelector('textarea[readonly]')).toBeNull();
+  });
+
+  it('does not announce copy completion when the fallback reports failure', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '코코포 팔레트 복사' }));
+
+    expect(screen.getByRole('alert', { name: '작업 오류' })).toHaveTextContent(
+      '클립보드에 복사하지 못했습니다.',
+    );
+    expect(screen.queryByText('코코포 팔레트를 복사했습니다.')).not.toBeInTheDocument();
+  });
+
+  it('closes the secret-dice modal before exposing a topbar copy error', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '비밀 주사위 복사' }));
+    const dialog = screen.getByRole('dialog', { name: '비밀 주사위 복사' });
+    await user.click(within(dialog).getByRole('button', { name: '일반 주사위 복사' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(screen.getByRole('alert', { name: '작업 오류' })).toHaveTextContent(
+      '클립보드에 복사하지 못했습니다.',
+    );
+  });
+
+  it('keeps a completed mutation announcement when reset undo is invalidated', async () => {
+    const user = await renderOpenCocSheet();
+    await user.click(screen.getByRole('button', { name: '초기화' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: '시트 초기화' })).getByRole('button', {
+        name: '초기화 확인',
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: '랜덤 다이스' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+        '랜덤 다이스 결과를 적용했습니다.',
+      ),
+    );
+    expect(screen.queryByRole('button', { name: '초기화 실행 취소' })).not.toBeInTheDocument();
+  });
+
+  it('moves focus to the next, previous, or Add target after COC row deletion', async () => {
+    const user = await renderOpenCocSheet();
+    const addWeapon = screen.getByRole('button', { name: '무기 추가' });
+    await user.click(addWeapon);
+    await user.click(addWeapon);
+    await user.click(addWeapon);
+    await user.type(
+      screen.getByRole('textbox', { name: '근거리 무기 3 이름' }),
+      '단검',
+    );
+
+    await user.click(screen.getByRole('button', { name: '근거리 무기 3 삭제' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '근거리 무기 3 삭제' })).toHaveFocus(),
+    );
+    expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+      '단검을 삭제했습니다.',
+    );
+
+    await user.click(screen.getByRole('button', { name: '근거리 무기 3 삭제' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '근거리 무기 2 삭제' })).toHaveFocus(),
+    );
+
+    await user.click(screen.getByRole('tab', { name: '방어구' }));
+    const addArmor = screen.getByRole('button', { name: '방어구 추가' });
+    await user.click(addArmor);
+    await user.click(screen.getByRole('button', { name: '방어구 1 삭제' }));
+    await waitFor(() => expect(addArmor).toHaveFocus());
+    expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+      '방어구 1을 삭제했습니다.',
+    );
+  });
+
+  it('moves focus through InSane repeated rows and announces the deleted item', async () => {
+    const user = await renderOpenInsaneSheet();
+    const addRelationship = screen.getByRole('button', { name: '인물 추가' });
+    await user.click(addRelationship);
+    await user.click(addRelationship);
+    await user.click(addRelationship);
+
+    await user.click(screen.getByRole('button', { name: '인물 2 삭제' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '인물 2 삭제' })).toHaveFocus(),
+    );
+    expect(screen.getByRole('status', { name: '작업 상태' })).toHaveTextContent(
+      '인물 2을 삭제했습니다.',
+    );
+
+    await user.click(screen.getByRole('button', { name: '인물 2 삭제' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '인물 1 삭제' })).toHaveFocus(),
+    );
+    await user.click(screen.getByRole('button', { name: '인물 1 삭제' }));
+    await waitFor(() => expect(addRelationship).toHaveFocus());
   });
 
   it('has no serious or critical axe violations with every sheet section open', async () => {

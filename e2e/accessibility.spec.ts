@@ -120,6 +120,44 @@ test.describe('accessibility smoke', () => {
     expect(positions?.targetBottom).toBeLessThanOrEqual((positions?.viewportHeight ?? 0) - 8);
   });
 
+  test('custom skill deletion focuses the next visible delete control', async ({ page }) => {
+    await page.getByRole('link', { name: '기능치' }).click();
+    const addSkill = page.getByRole('button', { name: '기능치 추가' }).first();
+    await addSkill.click();
+    await addSkill.click();
+    await addSkill.click();
+
+    const addedRows = page.locator('tr').filter({
+      has: page.locator('input[value="새 기능치"]:visible'),
+    });
+    const focusMarkers = await addedRows
+      .getByRole('button', { name: /기능치 삭제$/ })
+      .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('data-row-focus')));
+    expect(focusMarkers).toHaveLength(3);
+    expect(focusMarkers.every(Boolean)).toBe(true);
+
+    for (const [marker, name] of [
+      [focusMarkers[0], '다'],
+      [focusMarkers[1], '가'],
+      [focusMarkers[2], '나'],
+    ] as const) {
+      await page
+        .locator(`[data-row-focus="${marker}"]:visible`)
+        .locator('xpath=ancestor::tr')
+        .getByRole('textbox')
+        .fill(name);
+    }
+
+    await page.locator(`[data-row-focus="${focusMarkers[2]}"]:visible`).click();
+
+    await expect(
+      page.locator(`[data-row-focus="${focusMarkers[0]}"]:visible`),
+    ).toBeFocused();
+    await expect(page.getByRole('status', { name: '작업 상태' })).toContainText(
+      '나을 삭제했습니다.',
+    );
+  });
+
   test('reflows without document-level horizontal overflow in narrow and short viewports', async ({ page }) => {
     await page.getByRole('link', { name: '기능치' }).click();
     await expect(page.locator('#skills .section-toggle')).toHaveAttribute('aria-expanded', 'true');
@@ -223,7 +261,22 @@ test.describe('accessibility smoke', () => {
 
     await expect(dialog).toBeVisible();
     expect(await dialog.evaluate((element) => element.matches(':modal'))).toBe(true);
-    await expect(dialog.getByLabel(/룰북 구매확인 비밀번호/)).toBeFocused();
+    const passwordInput = dialog.getByLabel(/룰북 구매확인 비밀번호/);
+    await expect(passwordInput).toBeFocused();
+    await passwordInput.fill('incorrect');
+    await dialog.getByRole('button', { name: '확인' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(passwordInput).toHaveAttribute('aria-invalid', 'true');
+    const passwordErrorId = await passwordInput.getAttribute('aria-errormessage');
+    expect(passwordErrorId).toBeTruthy();
+    const passwordError = dialog.getByRole('alert');
+    await expect(passwordError).toHaveAttribute('id', passwordErrorId ?? '');
+    await expect(passwordError).toContainText(
+      '비밀번호가 일치하지 않습니다.',
+    );
+
+    await passwordInput.fill('e2e-test-password');
+    await expect(passwordInput).not.toHaveAttribute('aria-invalid', 'true');
     await dialog.evaluate((element) => {
       element.addEventListener(
         'close',

@@ -142,6 +142,7 @@ import {
   type AppPage,
 } from './lib/appRoutes';
 import { ModalDialog } from './components/ModalDialog';
+import { LiveMessage } from './components/LiveMessage';
 
 interface SheetState {
   basic: BasicInfo;
@@ -186,6 +187,8 @@ const storageKey = 'cclog-sheet:v1';
 const systemStorageKey = 'cclog-sheet:system';
 const insaneStorageKey = 'cclog-sheet:insane:v1';
 const colorPickerFallback = '#68c870';
+const resetUndoAvailableMessage =
+  '시트를 초기화했습니다. 다음 수정 전까지 실행 취소할 수 있습니다.';
 const isInsaneEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_INSANE === 'true';
 const insaneAbilityPresetPassword =
   (import.meta.env.VITE_INSANE_ABILITY_PASSWORD ?? '').trim();
@@ -305,6 +308,57 @@ function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function findFocusMarker(attribute: 'rowFocus' | 'addRow', value: string): HTMLElement | null {
+  const selector = attribute === 'rowFocus' ? '[data-row-focus]' : '[data-add-row]';
+  const matches = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(
+    (element) => element.dataset[attribute] === value,
+  );
+
+  return matches.find((element) => element.getClientRects().length > 0) ?? matches[0] ?? null;
+}
+
+function focusAfterRowRemoval(
+  rowKind: string,
+  itemIds: readonly string[],
+  removedId: string,
+) {
+  const markerPrefix = `${rowKind}:`;
+  const matchingMarkers = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-row-focus]'),
+  ).filter((element) => element.dataset.rowFocus?.startsWith(markerPrefix));
+  const visibleMarkers = matchingMarkers.filter((element) => element.getClientRects().length > 0);
+  const renderedMarkerValues = (visibleMarkers.length > 0 ? visibleMarkers : matchingMarkers)
+    .map((element) => element.dataset.rowFocus)
+    .filter((value): value is string => Boolean(value));
+  const markerValues = [...new Set(renderedMarkerValues)];
+  const fallbackMarkerValues = itemIds.map((id) => `${markerPrefix}${id}`);
+  const orderedMarkerValues = markerValues.includes(`${markerPrefix}${removedId}`)
+    ? markerValues
+    : fallbackMarkerValues;
+  const removedIndex = orderedMarkerValues.indexOf(`${markerPrefix}${removedId}`);
+  if (removedIndex < 0) return;
+  const targetMarker =
+    orderedMarkerValues[removedIndex + 1] ?? orderedMarkerValues[removedIndex - 1];
+
+  window.requestAnimationFrame(() => {
+    const rowTarget = targetMarker ? findFocusMarker('rowFocus', targetMarker) : null;
+    (rowTarget ?? findFocusMarker('addRow', rowKind))?.focus();
+  });
+}
+
+function focusAfterIndexedRowRemoval(rowKind: string, rowCount: number, removedIndex: number) {
+  const remainingCount = rowCount - 1;
+  const targetIndex = remainingCount > 0 ? Math.min(removedIndex, remainingCount - 1) : null;
+
+  window.requestAnimationFrame(() => {
+    const target =
+      targetIndex === null
+        ? findFocusMarker('addRow', rowKind)
+        : findFocusMarker('rowFocus', `${rowKind}:${targetIndex}`);
+    target?.focus();
+  });
+}
+
 function createInitialSheet(edition: CocEdition = 'coc7'): SheetState {
   const stats =
     edition === 'coc6' ? convertInvestigatorStats(defaultStats, 'coc7', 'coc6') : defaultStats;
@@ -338,8 +392,12 @@ function App() {
   const [skillSearch, setSkillSearch] = useState('');
   const [skillCategory, setSkillCategory] = useState('전체');
   const [growthMessage, setGrowthMessage] = useState('');
+  const [growthAnnouncementKey, setGrowthAnnouncementKey] = useState(0);
   const [growthResults, setGrowthResults] = useState<GrowthResult[]>([]);
   const [toolbarMessage, setToolbarMessage] = useState('');
+  const [toolbarMessageKind, setToolbarMessageKind] = useState<'info' | 'error'>('info');
+  const [toolbarAnnouncementKey, setToolbarAnnouncementKey] = useState(0);
+  const [importError, setImportError] = useState('');
   const [sectionOpen, setSectionOpen] = useState(createInitialSectionOpenState);
   const [isSidebarOpen, setIsSidebarOpen] = useState(createInitialSidebarOpenState);
   const [activeSkillGroupId, setActiveSkillGroupId] = useState<string | null>(null);
@@ -355,6 +413,8 @@ function App() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [resetSnapshot, setResetSnapshot] = useState<ResetSnapshot | null>(null);
   const [insaneAbilityPasswordDraft, setInsaneAbilityPasswordDraft] = useState('');
+  const [insaneAbilityPasswordError, setInsaneAbilityPasswordError] = useState('');
+  const [insaneAbilityPasswordErrorKey, setInsaneAbilityPasswordErrorKey] = useState(0);
   const [isInsaneAbilityPresetUnlocked, setIsInsaneAbilityPresetUnlocked] = useState(false);
   const [insaneAbilityPresets, setLoadedInsaneAbilityPresets] = useState<InsaneAbilityPreset[]>([]);
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
@@ -429,6 +489,18 @@ function App() {
     [characterClipboardSource],
   );
 
+  function announceToolbarMessage(message: string) {
+    setToolbarMessageKind('info');
+    setToolbarMessage(message);
+    setToolbarAnnouncementKey((current) => current + 1);
+  }
+
+  function announceToolbarError(message: string) {
+    setToolbarMessageKind('error');
+    setToolbarMessage(message);
+    setToolbarAnnouncementKey((current) => current + 1);
+  }
+
   const filteredSkills = sortSkillsByKoreanName(
     sheet.skills.filter((skill) => {
       const matchesSearch = skill.name.toLowerCase().includes(skillSearch.toLowerCase());
@@ -473,7 +545,9 @@ function App() {
 
     if (resetSnapshot) {
       setResetSnapshot(null);
-      setToolbarMessage('');
+      setToolbarMessage((current) =>
+        current === resetUndoAvailableMessage ? '' : current,
+      );
     }
   }, [insaneSheet, resetSnapshot, sheet]);
 
@@ -493,10 +567,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    setToolbarMessage('');
+    setImportError('');
     setIsSecretDiceDialogOpen(false);
     setIsCocExportDialogOpen(false);
     setIsInsaneAbilityPasswordDialogOpen(false);
+    setInsaneAbilityPasswordError('');
     setIsResetDialogOpen(false);
     setResetSnapshot(null);
   }, [gameSystem]);
@@ -543,6 +618,9 @@ function App() {
   }
 
   function removeStandingImage(index: number) {
+    const removedImage = sheet.basic.standingImages[index];
+    if (!removedImage) return;
+    focusAfterIndexedRowRemoval('coc-standing-image', sheet.basic.standingImages.length, index);
     setSheet((current) => ({
       ...current,
       basic: {
@@ -552,6 +630,9 @@ function App() {
         ),
       },
     }));
+    announceToolbarMessage(
+      `${removedImage.label.trim() || `표정 이미지 ${index + 1}`}을 삭제했습니다.`,
+    );
   }
 
   function toggleSection(sectionId: SheetSectionId) {
@@ -634,10 +715,12 @@ function App() {
     const availableNextSystem = resolveAvailableGameSystem(nextSystem, gameSystem);
 
     if (availableNextSystem === gameSystem) return;
+    setToolbarMessage('');
 
     if (availableNextSystem === 'insan' && !isInsaneAbilityPresetUnlocked) {
       setInsaneSheet((current) => current ?? loadInsaneSheet());
       setInsaneAbilityPasswordDraft('');
+      setInsaneAbilityPasswordError('');
       pendingInsanePasswordSubmitRef.current = null;
       setIsInsaneAbilityPasswordDialogOpen(true);
       return;
@@ -657,22 +740,40 @@ function App() {
 
   function openInsaneSheetWithAbilityLock(isUnlocked: boolean) {
     if (!isInsaneEnabled) return;
+    setToolbarMessage('');
     setInsaneSheet((current) => current ?? loadInsaneSheet());
     setIsInsaneAbilityPresetUnlocked(isUnlocked);
     setInsaneAbilityPasswordDraft('');
+    setInsaneAbilityPasswordError('');
     setIsInsaneAbilityPasswordDialogOpen(false);
     setGameSystem('insan');
   }
 
-  function confirmInsaneAbilityPassword() {
-    pendingInsanePasswordSubmitRef.current =
+  function updateInsaneAbilityPasswordDraft(value: string) {
+    setInsaneAbilityPasswordDraft(value);
+    setInsaneAbilityPasswordError('');
+  }
+
+  function confirmInsaneAbilityPassword(): boolean {
+    const isAccepted =
       Boolean(insaneAbilityPresetPassword) &&
       insaneAbilityPasswordDraft.trim() === insaneAbilityPresetPassword;
+    pendingInsanePasswordSubmitRef.current = isAccepted;
+
+    if (!isAccepted) {
+      setInsaneAbilityPasswordError('비밀번호가 일치하지 않습니다.');
+      setInsaneAbilityPasswordErrorKey((current) => current + 1);
+      return false;
+    }
+
+    setInsaneAbilityPasswordError('');
+    return true;
   }
 
   function closeInsaneAbilityPassword() {
     const isPasswordAccepted = pendingInsanePasswordSubmitRef.current ?? false;
     pendingInsanePasswordSubmitRef.current = null;
+    setInsaneAbilityPasswordError('');
     openInsaneSheetWithAbilityLock(isPasswordAccepted);
   }
 
@@ -769,10 +870,18 @@ function App() {
   }
 
   function removeSkill(id: string) {
+    const removableSkill = sheet.skills.find((skill) => skill.id === id && skill.custom);
+    if (!removableSkill) return;
+    focusAfterRowRemoval(
+      'coc-skill',
+      sheet.skills.filter((skill) => skill.custom && !isSkillGroup(skill)).map((skill) => skill.id),
+      id,
+    );
     setSheet((current) => ({
       ...current,
       skills: current.skills.filter((skill) => skill.id !== id || !skill.custom),
     }));
+    announceToolbarMessage(`${removableSkill.name.trim() || '사용자 기능치'}을 삭제했습니다.`);
   }
 
   function rollStats() {
@@ -787,6 +896,7 @@ function App() {
       ),
       skills: normalizeStoredSkills(current.skills, stats, cocEdition),
     }));
+    announceToolbarMessage('랜덤 다이스 결과를 적용했습니다.');
   }
 
   function growCheckedSkills() {
@@ -797,11 +907,12 @@ function App() {
       skills: result.skills,
     }));
     setGrowthResults(result.growthResults);
-    setGrowthMessage(
+    const message =
       result.rolledCount === 0
         ? '성장 체크된 기능치가 없습니다.'
-        : `${result.rolledCount}개 기능치를 굴려 ${result.growthResults.length}개 기능치가 성장했습니다.`,
-    );
+        : `${result.rolledCount}개 기능치를 굴려 ${result.growthResults.length}개 기능치가 성장했습니다.`;
+    setGrowthMessage(message);
+    setGrowthAnnouncementKey((current) => current + 1);
   }
 
   function handleCombatTabKeyDown(
@@ -854,10 +965,22 @@ function App() {
   }
 
   function removeWeapon(id: string) {
+    const removedIndex = visibleWeapons.findIndex((weapon) => weapon.id === id);
+    const removedWeapon = visibleWeapons[removedIndex];
+    if (!removedWeapon || removedWeapon.isDefault) return;
+    const removedContext = `${weaponCategoryLabels[removedWeapon.category]} 무기 ${removedIndex + 1}`;
+    focusAfterRowRemoval(
+      'coc-weapon',
+      visibleWeapons.filter((weapon) => !weapon.isDefault).map((weapon) => weapon.id),
+      id,
+    );
     setSheet((current) => ({
       ...current,
       weapons: current.weapons.filter((weapon) => weapon.id !== id || weapon.isDefault),
     }));
+    announceToolbarMessage(
+      `${removedWeapon.name.trim() || removedContext}을 삭제했습니다.`,
+    );
   }
 
   function updateArmor(id: string, key: keyof CombatArmor, value: string) {
@@ -877,10 +1000,14 @@ function App() {
   }
 
   function removeArmor(id: string) {
+    const removedIndex = sheet.armors.findIndex((armor) => armor.id === id);
+    if (removedIndex < 0) return;
+    focusAfterRowRemoval('coc-armor', sheet.armors.map((armor) => armor.id), id);
     setSheet((current) => ({
       ...current,
       armors: current.armors.filter((armor) => armor.id !== id),
     }));
+    announceToolbarMessage(`방어구 ${removedIndex + 1}을 삭제했습니다.`);
   }
 
   function updateSpell(id: string, key: keyof CombatSpell, value: string) {
@@ -900,10 +1027,17 @@ function App() {
   }
 
   function removeSpell(id: string) {
+    const removedIndex = sheet.spells.findIndex((spell) => spell.id === id);
+    const removedSpell = sheet.spells[removedIndex];
+    if (!removedSpell) return;
+    focusAfterRowRemoval('coc-spell', sheet.spells.map((spell) => spell.id), id);
     setSheet((current) => ({
       ...current,
       spells: current.spells.filter((spell) => spell.id !== id),
     }));
+    announceToolbarMessage(
+      `${removedSpell.name.trim() || `주문 ${removedIndex + 1}`}을 삭제했습니다.`,
+    );
   }
 
   function addScenario() {
@@ -938,10 +1072,17 @@ function App() {
   }
 
   function removeScenario(id: string) {
+    const removedIndex = sheet.scenarios.findIndex((scenario) => scenario.id === id);
+    const removedScenario = sheet.scenarios[removedIndex];
+    if (!removedScenario) return;
+    focusAfterRowRemoval('coc-scenario', sheet.scenarios.map((scenario) => scenario.id), id);
     setSheet((current) => ({
       ...current,
       scenarios: current.scenarios.filter((scenario) => scenario.id !== id),
     }));
+    announceToolbarMessage(
+      `${removedScenario.title.trim() || `세션 ${removedIndex + 1}`}을 삭제했습니다.`,
+    );
   }
 
   function exportJson() {
@@ -950,6 +1091,7 @@ function App() {
         { ...insaneSheet, gameSystem: 'insan' },
         insaneSheet.basic.name || 'insan-character',
       );
+      announceToolbarMessage('시트를 저장했습니다.');
       return;
     }
 
@@ -960,6 +1102,7 @@ function App() {
     const archive = createCocExportArchive(sheet, mode, cocEdition);
     downloadJsonArchive(archive, sheet.basic.name || 'investigator');
     setIsCocExportDialogOpen(false);
+    announceToolbarMessage('시트를 저장했습니다.');
   }
 
   function downloadJsonArchive(activeSheet: unknown, activeName: string) {
@@ -973,6 +1116,7 @@ function App() {
   }
 
   function importJson(event: ChangeEvent<HTMLInputElement>) {
+    setImportError('');
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -991,8 +1135,10 @@ function App() {
           const targetEdition = targetSystem === 'coc6' ? 'coc6' : 'coc7';
           setSheet(normalizeSheetState(parsedArchive as SheetStateArchive, targetEdition));
         }
+        setImportError('');
+        announceToolbarMessage('시트를 불러왔습니다.');
       } catch {
-        setGrowthMessage('로드 파일을 읽지 못했습니다.');
+        setImportError('로드 파일을 읽지 못했습니다.');
       }
     };
     reader.readAsText(file);
@@ -1003,27 +1149,39 @@ function App() {
     if (isInsaneMode && insaneSheet) {
       const copyError = getInsanePaletteCopyError(insaneSheet);
       if (copyError) {
-        setToolbarMessage(copyError);
+        announceToolbarError(copyError);
         return;
       }
 
-      await writeClipboardText(serializeInsaneCcfoliaCharacter(insaneSheet));
-      setToolbarMessage('');
+      const didCopy = await writeClipboardText(serializeInsaneCcfoliaCharacter(insaneSheet));
+      if (!didCopy) {
+        announceToolbarError('클립보드에 복사하지 못했습니다.');
+        return;
+      }
+      announceToolbarMessage('코코포 팔레트를 복사했습니다.');
       return;
     }
 
     const payload = buildCharacterClipboardPayload(characterClipboardSource);
     const text = serializeCharacterClipboardPayload(payload);
 
-    await writeClipboardText(text);
-    setToolbarMessage('');
+    const didCopy = await writeClipboardText(text);
+    if (!didCopy) {
+      announceToolbarError('클립보드에 복사하지 못했습니다.');
+      return;
+    }
+    announceToolbarMessage('코코포 팔레트를 복사했습니다.');
   }
 
   async function copyRoll20CocSheetToClipboard() {
     const text = serializeRoll20CocSheetImport(characterClipboardSource);
 
-    await writeClipboardText(text);
-    setToolbarMessage('');
+    const didCopy = await writeClipboardText(text);
+    if (!didCopy) {
+      announceToolbarError('클립보드에 복사하지 못했습니다.');
+      return;
+    }
+    announceToolbarMessage('Roll20 COC 시트를 복사했습니다.');
   }
 
   function openSecretDiceDialog() {
@@ -1057,9 +1215,18 @@ function App() {
       templateKind,
     );
 
-    await writeClipboardText(text);
+    const didCopy = await writeClipboardText(text);
+    if (!didCopy) {
+      setIsSecretDiceDialogOpen(false);
+      announceToolbarError('클립보드에 복사하지 못했습니다.');
+      return;
+    }
     setIsSecretDiceDialogOpen(false);
-    setToolbarMessage('');
+    announceToolbarMessage(
+      templateKind === 'normal'
+        ? '일반 비밀 주사위를 복사했습니다.'
+        : '보정 비밀 주사위를 복사했습니다.',
+    );
   }
 
   function openResetDialog() {
@@ -1084,7 +1251,7 @@ function App() {
       setGrowthResults([]);
     }
 
-    setToolbarMessage('시트를 초기화했습니다. 다음 수정 전까지 실행 취소할 수 있습니다.');
+    announceToolbarMessage(resetUndoAvailableMessage);
     setIsResetDialogOpen(false);
   }
 
@@ -1098,7 +1265,7 @@ function App() {
     setGrowthMessage(resetSnapshot.growthMessage);
     setGrowthResults(resetSnapshot.growthResults);
     setResetSnapshot(null);
-    setToolbarMessage('초기화를 실행 취소했습니다.');
+    announceToolbarMessage('초기화를 실행 취소했습니다.');
 
     window.requestAnimationFrame(() => resetButtonRef.current?.focus());
   }
@@ -1224,6 +1391,7 @@ function App() {
             <button
               type="button"
               className="icon-button"
+              onClickCapture={() => setImportError('')}
               onClick={() => importInputRef.current?.click()}
               title="로드"
             >
@@ -1231,6 +1399,12 @@ function App() {
               <span>로드</span>
             </button>
             <input ref={importInputRef} hidden type="file" accept="application/json" onChange={importJson} />
+            <LiveMessage
+              className={importError ? 'topbar-message' : 'sr-only'}
+              aria-label="로드 오류"
+              kind="error"
+              message={importError}
+            />
             <button
               type="button"
               className="icon-button"
@@ -1292,11 +1466,13 @@ function App() {
               </button>
             </div>
           )}
-          {toolbarMessage && (
-            <p className="topbar-message" role="status">
-              {toolbarMessage}
-            </p>
-          )}
+          <LiveMessage
+            className={toolbarMessage ? 'topbar-message' : 'sr-only'}
+            aria-label={toolbarMessageKind === 'error' ? '작업 오류' : '작업 상태'}
+            kind={toolbarMessageKind}
+            message={toolbarMessage}
+            announcementKey={toolbarAnnouncementKey}
+          />
         </header>
 
         {isSecretDiceDialogOpen && (
@@ -1327,7 +1503,9 @@ function App() {
         {isInsaneEnabled && isInsaneAbilityPasswordDialogOpen && (
           <InsaneAbilityPasswordDialog
             value={insaneAbilityPasswordDraft}
-            onChange={setInsaneAbilityPasswordDraft}
+            error={insaneAbilityPasswordError}
+            errorAnnouncementKey={insaneAbilityPasswordErrorKey}
+            onChange={updateInsaneAbilityPasswordDraft}
             onConfirm={confirmInsaneAbilityPassword}
             onClose={closeInsaneAbilityPassword}
           />
@@ -1355,6 +1533,7 @@ function App() {
               onToggle={toggleSection}
               abilityPresetImportLocked={isAbilityPresetImportLocked}
               insaneAbilityPresets={insaneAbilityPresets}
+              onAnnounce={announceToolbarMessage}
             />
           ) : (
             <>
@@ -1388,7 +1567,7 @@ function App() {
                 <div className="field standing-image-field wide">
                   <div className="field-label-row">
                     <span>표정별 이미지</span>
-                    <button type="button" onClick={addStandingImage}>
+                    <button type="button" data-add-row="coc-standing-image" onClick={addStandingImage}>
                       <Plus size={14} />
                       추가
                     </button>
@@ -1417,6 +1596,7 @@ function App() {
                           />
                           <button
                             type="button"
+                            data-row-focus={`coc-standing-image:${index}`}
                             className="icon-only danger"
                             onClick={() => removeStandingImage(index)}
                             aria-label={`표정 이미지 ${index + 1} 삭제`}
@@ -1499,7 +1679,7 @@ function App() {
             className="wide-panel"
             icon={<BookOpen size={20} />}
             title="기능치"
-            action={<button type="button" onClick={addSkill}><Plus size={16} /> 기능치 추가</button>}
+            action={<button type="button" data-add-row="coc-skill" onClick={addSkill}><Plus size={16} /> 기능치 추가</button>}
             isOpen={sectionOpen.skills}
             onToggle={toggleSection}
           >
@@ -1547,21 +1727,24 @@ function App() {
                 성장 굴림 {checkedSkillCount > 0 ? checkedSkillCount : ''}
               </button>
             </div>
-            {growthMessage && (
-              <div className="growth-summary">
-                <p className="status-line">{growthMessage}</p>
-                {growthResults.length > 0 && (
-                  <ul className="growth-results" aria-label="성장한 기능치 목록">
-                    {growthResults.map((result) => (
-                      <li key={result.id}>
-                        <strong>{result.name}</strong>
-                        <span>+{result.increase}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+            <div className={growthMessage ? 'growth-summary' : 'sr-only'}>
+              <LiveMessage
+                className="status-line"
+                aria-label="성장 결과"
+                message={growthMessage}
+                announcementKey={growthAnnouncementKey}
+              />
+              {growthMessage && growthResults.length > 0 && (
+                <ul className="growth-results" aria-label="성장한 기능치 목록">
+                  {growthResults.map((result) => (
+                    <li key={result.id}>
+                      <strong>{result.name}</strong>
+                      <span>+{result.increase}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="filter-row">
               <div className="search-field">
                 <Search size={17} aria-hidden="true" />
@@ -1623,7 +1806,7 @@ function App() {
               ))}
             </div>
             <div className="skill-bottom-actions">
-              <button type="button" onClick={addSkill}>
+              <button type="button" data-add-row="coc-skill" onClick={addSkill}>
                 <Plus size={16} /> 기능치 추가
               </button>
             </div>
@@ -1681,7 +1864,7 @@ function App() {
                       </button>
                     ))}
                   </div>
-                  <button type="button" onClick={addWeapon}>
+                  <button type="button" data-add-row="coc-weapon" onClick={addWeapon}>
                     <Plus size={16} /> 무기 추가
                   </button>
                 </div>
@@ -1763,7 +1946,7 @@ function App() {
                             )}
                             <td>
                               {!weapon.isDefault && (
-                                <button type="button" className="icon-only danger" onClick={() => removeWeapon(weapon.id)} aria-label={`${weaponContext} 삭제`}>
+                                <button type="button" data-row-focus={`coc-weapon:${weapon.id}`} className="icon-only danger" onClick={() => removeWeapon(weapon.id)} aria-label={`${weaponContext} 삭제`}>
                                   <Trash2 size={15} />
                                 </button>
                               )}
@@ -1785,7 +1968,7 @@ function App() {
               hidden={combatTab !== 'armor'}
             >
                 <div className="combat-pane-toolbar">
-                  <button type="button" onClick={addArmor}>
+                  <button type="button" data-add-row="coc-armor" onClick={addArmor}>
                     <Plus size={16} /> 방어구 추가
                   </button>
                 </div>
@@ -1816,7 +1999,7 @@ function App() {
                               <input aria-label={`방어구 ${armorIndex + 1} 방어 데이터`} value={armor.defense} onChange={(event) => updateArmor(armor.id, 'defense', event.target.value)} />
                             </td>
                             <td>
-                              <button type="button" className="icon-only danger" onClick={() => removeArmor(armor.id)} aria-label={`방어구 ${armorIndex + 1} 삭제`}>
+                              <button type="button" data-row-focus={`coc-armor:${armor.id}`} className="icon-only danger" onClick={() => removeArmor(armor.id)} aria-label={`방어구 ${armorIndex + 1} 삭제`}>
                                 <Trash2 size={15} />
                               </button>
                             </td>
@@ -1836,7 +2019,7 @@ function App() {
               hidden={combatTab !== 'spells'}
             >
                 <div className="combat-pane-toolbar">
-                  <button type="button" onClick={addSpell}>
+                  <button type="button" data-add-row="coc-spell" onClick={addSpell}>
                     <Plus size={16} /> 주문 추가
                   </button>
                 </div>
@@ -1874,7 +2057,7 @@ function App() {
                               <textarea aria-label={`${spellContext} 설명`} value={spell.description} onChange={(event) => updateSpell(spell.id, 'description', event.target.value)} />
                             </td>
                             <td>
-                              <button type="button" className="icon-only danger" onClick={() => removeSpell(spell.id)} aria-label={`${spellContext} 삭제`}>
+                              <button type="button" data-row-focus={`coc-spell:${spell.id}`} className="icon-only danger" onClick={() => removeSpell(spell.id)} aria-label={`${spellContext} 삭제`}>
                                 <Trash2 size={15} />
                               </button>
                             </td>
@@ -1918,7 +2101,7 @@ function App() {
             className="wide-panel"
             icon={<Upload size={20} />}
             title="세션"
-            action={<button type="button" onClick={addScenario}><Plus size={16} /> 세션 추가</button>}
+            action={<button type="button" data-add-row="coc-scenario" onClick={addScenario}><Plus size={16} /> 세션 추가</button>}
             isOpen={sectionOpen.scenarios}
             onToggle={toggleSection}
           >
@@ -1933,6 +2116,7 @@ function App() {
                   <ScenarioSummary label="보상" value={scenario.reward || '-'} />
                   <button
                     type="button"
+                    data-row-focus={`coc-scenario:${scenario.id}`}
                     className="icon-only danger"
                     onClick={() => removeScenario(scenario.id)}
                     aria-label={`세션 ${scenarioIndex + 1} ${scenario.title.trim() || '제목 없음'} 삭제`}
@@ -2181,16 +2365,21 @@ function SecretDiceDialog({
 
 function InsaneAbilityPasswordDialog({
   value,
+  error,
+  errorAnnouncementKey,
   onChange,
   onConfirm,
   onClose,
 }: {
   value: string;
+  error: string;
+  errorAnnouncementKey: number;
   onChange: (value: string) => void;
-  onConfirm: () => void;
+  onConfirm: () => boolean;
   onClose: () => void;
 }) {
   const initialFocusRef = useRef<HTMLInputElement>(null);
+  const errorId = useId();
 
   return (
     <ModalDialog
@@ -2204,7 +2393,9 @@ function InsaneAbilityPasswordDialog({
       <form
         className="dialog-form"
         method="dialog"
-        onSubmit={onConfirm}
+        onSubmit={(event) => {
+          if (!onConfirm()) event.preventDefault();
+        }}
       >
         <header className="secret-dice-header">
           <div>
@@ -2225,9 +2416,17 @@ function InsaneAbilityPasswordDialog({
               ref={initialFocusRef}
               type="password"
               value={value}
+              aria-invalid={error ? true : undefined}
+              aria-errormessage={error ? errorId : undefined}
               onChange={(event) => onChange(event.target.value)}
             />
           </label>
+          <LiveMessage
+            id={errorId}
+            kind="error"
+            message={error}
+            announcementKey={errorAnnouncementKey}
+          />
         </div>
 
         <footer className="insane-password-actions">
@@ -2405,20 +2604,34 @@ function convertCocSheetEdition(
   };
 }
 
-async function writeClipboardText(text: string) {
+async function writeClipboardText(text: string): Promise<boolean> {
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
-      return;
+      if (
+        activeElement?.isConnected &&
+        (document.activeElement === activeElement || document.activeElement === document.body)
+      ) {
+        activeElement.focus();
+      }
+      return true;
     } catch {
       // Fall back for browsers that expose Clipboard API but reject writes.
     }
   }
 
-  copyTextWithTextarea(text);
+  try {
+    return copyTextWithTextarea(text);
+  } catch {
+    return false;
+  }
 }
 
 function copyTextWithTextarea(text: string): boolean {
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
@@ -2427,8 +2640,14 @@ function copyTextWithTextarea(text: string): boolean {
   document.body.appendChild(textarea);
   textarea.focus();
   textarea.select();
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textarea);
+  let copied = false;
+
+  try {
+    copied = document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+    if (activeElement?.isConnected) activeElement.focus();
+  }
 
   return copied;
 }
@@ -2440,6 +2659,7 @@ function InsaneSheetView({
   onToggle,
   abilityPresetImportLocked,
   insaneAbilityPresets,
+  onAnnounce,
 }: {
   sheet: InsaneSheetState;
   setSheet: React.Dispatch<React.SetStateAction<InsaneSheetState>>;
@@ -2447,6 +2667,7 @@ function InsaneSheetView({
   onToggle: (sectionId: SheetSectionId) => void;
   abilityPresetImportLocked: boolean;
   insaneAbilityPresets: InsaneAbilityPreset[];
+  onAnnounce: (message: string) => void;
 }) {
   function updateBasic(key: keyof InsaneSheetState['basic'], value: string | number) {
     setSheet((current) => ({
@@ -2485,6 +2706,13 @@ function InsaneSheetView({
   }
 
   function removeInsaneStandingImage(index: number) {
+    const removedImage = sheet.basic.standingImages[index];
+    if (!removedImage) return;
+    focusAfterIndexedRowRemoval(
+      'insane-standing-image',
+      sheet.basic.standingImages.length,
+      index,
+    );
     setSheet((current) => ({
       ...current,
       basic: {
@@ -2492,6 +2720,9 @@ function InsaneSheetView({
         standingImages: current.basic.standingImages.filter((_, imageIndex) => imageIndex !== index),
       },
     }));
+    onAnnounce(
+      `${removedImage.label.trim() || `인세인 표정 이미지 ${index + 1}`}을 삭제했습니다.`,
+    );
   }
 
   function updateVital(
@@ -2556,6 +2787,7 @@ function InsaneSheetView({
 
   function rollRandomInsaneSetup() {
     setSheet((current) => rollInsaneRandomSetup(current));
+    onAnnounce('랜덤 다이스 결과를 적용했습니다.');
   }
 
   function addRelationship() {
@@ -2589,10 +2821,21 @@ function InsaneSheetView({
   }
 
   function removeRelationship(id: string) {
+    const removedIndex = sheet.relationships.findIndex((relationship) => relationship.id === id);
+    const removedRelationship = sheet.relationships[removedIndex];
+    if (!removedRelationship) return;
+    focusAfterRowRemoval(
+      'insane-relationship',
+      sheet.relationships.map((relationship) => relationship.id),
+      id,
+    );
     setSheet((current) => ({
       ...current,
       relationships: current.relationships.filter((relationship) => relationship.id !== id),
     }));
+    onAnnounce(
+      `${removedRelationship.name.trim() || `인물 ${removedIndex + 1}`}을 삭제했습니다.`,
+    );
   }
 
   function updateItem(
@@ -2666,10 +2909,21 @@ function InsaneSheetView({
   }
 
   function removeAbility(id: string) {
+    const removedIndex = sheet.abilities.findIndex((ability) => ability.id === id);
+    const removedAbility = sheet.abilities[removedIndex];
+    if (!removedAbility || isDefaultInsaneAbility(removedAbility)) return;
+    focusAfterRowRemoval(
+      'insane-ability',
+      sheet.abilities.filter((ability) => !isDefaultInsaneAbility(ability)).map((ability) => ability.id),
+      id,
+    );
     setSheet((current) => ({
       ...current,
       abilities: current.abilities.filter((ability) => ability.id !== id || isDefaultInsaneAbility(ability)),
     }));
+    onAnnounce(
+      `${removedAbility.name.trim() || `어빌리티 ${removedIndex + 1}`}을 삭제했습니다.`,
+    );
   }
 
   function addSession() {
@@ -2699,10 +2953,19 @@ function InsaneSheetView({
   }
 
   function removeSession(id: string) {
+    const removedIndex = sheet.sessions.findIndex((session) => session.id === id);
+    const removedSession = sheet.sessions[removedIndex];
+    if (!removedSession) return;
+    focusAfterRowRemoval(
+      'insane-session',
+      sheet.sessions.map((session) => session.id),
+      id,
+    );
     setSheet((current) => ({
       ...current,
       sessions: current.sessions.filter((session) => session.id !== id),
     }));
+    onAnnounce(`${removedSession.title.trim() || `세션 ${removedIndex + 1}`}을 삭제했습니다.`);
   }
 
   const sanityPenalty = calculateInsaneSanityPenalty(sheet);
@@ -2764,7 +3027,7 @@ function InsaneSheetView({
             <div className="field standing-image-field wide">
               <div className="field-label-row">
                 <span>표정별 이미지</span>
-                <button type="button" onClick={addInsaneStandingImage}>
+                <button type="button" data-add-row="insane-standing-image" onClick={addInsaneStandingImage}>
                   <Plus size={14} />
                   추가
                 </button>
@@ -2793,6 +3056,7 @@ function InsaneSheetView({
                       />
                       <button
                         type="button"
+                        data-row-focus={`insane-standing-image:${index}`}
                         className="icon-only danger"
                         onClick={() => removeInsaneStandingImage(index)}
                         aria-label={`인세인 표정 이미지 ${index + 1} 삭제`}
@@ -3016,6 +3280,7 @@ function InsaneSheetView({
         action={
           <button
             type="button"
+            data-add-row="insane-ability"
             onClick={addAbility}
             disabled={!canAddAbility}
             title={canAddAbility ? '어빌리티 추가' : '어빌리티는 8개까지 추가할 수 있습니다'}
@@ -3077,7 +3342,7 @@ function InsaneSheetView({
               )}
               <TextArea label="효과" accessibleLabel={`어빌리티 ${abilityIndex + 1} 효과`} value={ability.effect} onChange={(value) => updateAbility(ability.id, 'effect', value)} />
               {!isDefaultInsaneAbility(ability) ? (
-                <button type="button" className="icon-only danger" onClick={() => removeAbility(ability.id)} aria-label={`어빌리티 ${abilityIndex + 1} 삭제`}>
+                <button type="button" data-row-focus={`insane-ability:${ability.id}`} className="icon-only danger" onClick={() => removeAbility(ability.id)} aria-label={`어빌리티 ${abilityIndex + 1} 삭제`}>
                   <Trash2 size={15} />
                 </button>
               ) : (
@@ -3093,7 +3358,7 @@ function InsaneSheetView({
         className="wide-panel"
         icon={<FileText size={20} />}
         title="인물란"
-        action={<button type="button" onClick={addRelationship}><Plus size={16} /> 인물 추가</button>}
+        action={<button type="button" data-add-row="insane-relationship" onClick={addRelationship}><Plus size={16} /> 인물 추가</button>}
         isOpen={sectionOpen.story}
         onToggle={onToggle}
       >
@@ -3116,7 +3381,7 @@ function InsaneSheetView({
                   <option value="－">－</option>
                 </select>
               </label>
-              <button type="button" className="icon-only danger" onClick={() => removeRelationship(relationship.id)} aria-label={`인물 ${relationshipIndex + 1} 삭제`}>
+              <button type="button" data-row-focus={`insane-relationship:${relationship.id}`} className="icon-only danger" onClick={() => removeRelationship(relationship.id)} aria-label={`인물 ${relationshipIndex + 1} 삭제`}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -3129,7 +3394,7 @@ function InsaneSheetView({
         className="wide-panel"
         icon={<Upload size={20} />}
         title="세션"
-        action={<button type="button" onClick={addSession}><Plus size={16} /> 세션 추가</button>}
+        action={<button type="button" data-add-row="insane-session" onClick={addSession}><Plus size={16} /> 세션 추가</button>}
         isOpen={sectionOpen.scenarios}
         onToggle={onToggle}
       >
@@ -3142,7 +3407,7 @@ function InsaneSheetView({
               <TextField label="PC번호" accessibleLabel={`세션 ${sessionIndex + 1} PC번호`} value={session.pcNumber} onChange={(value) => updateSession(session.id, 'pcNumber', value)} />
               <TextField label="공적점" accessibleLabel={`세션 ${sessionIndex + 1} 공적점`} value={session.merit} onChange={(value) => updateSession(session.id, 'merit', value)} />
               <TextField label="비고" accessibleLabel={`세션 ${sessionIndex + 1} 비고`} value={session.note} onChange={(value) => updateSession(session.id, 'note', value)} />
-              <button type="button" className="icon-only danger" onClick={() => removeSession(session.id)} aria-label={`세션 ${sessionIndex + 1} 삭제`}>
+              <button type="button" data-row-focus={`insane-session:${session.id}`} className="icon-only danger" onClick={() => removeSession(session.id)} aria-label={`세션 ${sessionIndex + 1} 삭제`}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -3650,7 +3915,7 @@ function SkillTable({
                 <td className="total-cell">{total}</td>
                 <td>
                   {skill.custom && (
-                    <button type="button" className="icon-only danger" onClick={() => onRemoveSkill(skill.id)} aria-label={`${skillContext} 기능치 삭제`}>
+                    <button type="button" data-row-focus={`coc-skill:${skill.id}`} className="icon-only danger" onClick={() => onRemoveSkill(skill.id)} aria-label={`${skillContext} 기능치 삭제`}>
                       <Trash2 size={15} />
                     </button>
                   )}
