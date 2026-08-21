@@ -4,8 +4,12 @@ import './test/setup';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe, { type Result as AxeViolation } from 'axe-core';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+
+afterEach(() => {
+  window.history.replaceState(null, '', '/cclog_sheet/');
+});
 
 const cocSectionNames = [
   '탐사자정보',

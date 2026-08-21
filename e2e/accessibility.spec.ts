@@ -1,5 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+type RgbaColor = {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+};
 
 const automatedWcagTags = [
   'wcag2a',
@@ -13,6 +20,86 @@ const automatedWcagTags = [
 async function openSheet(page: Page) {
   await page.goto('./');
   await expect(page.getByRole('heading', { level: 1, name: '새로운 탐사자' })).toBeVisible();
+}
+
+async function focusWithKeyboard(page: Page, target: Locator) {
+  const markerId = `focus-marker-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await target.evaluate((element, id) => {
+    const marker = document.createElement('button');
+    marker.id = id;
+    marker.type = 'button';
+    marker.setAttribute('aria-hidden', 'true');
+    marker.style.position = 'fixed';
+    marker.style.inset = '0 auto auto 0';
+    marker.style.opacity = '0';
+    (element.closest('label') ?? element).before(marker);
+    marker.focus();
+  }, markerId);
+  await page.keyboard.press('Tab');
+  await expect(target).toBeFocused();
+  await page.locator(`#${markerId}`).evaluate((element) => element.remove());
+}
+
+function parseCssColor(value: string): RgbaColor {
+  const channels = value.match(/[\d.]+/g)?.map(Number);
+  if (!channels || channels.length < 3) {
+    throw new Error(`Unsupported computed color: ${value}`);
+  }
+
+  return {
+    red: channels[0],
+    green: channels[1],
+    blue: channels[2],
+    alpha: channels[3] ?? 1,
+  };
+}
+
+function compositeColor(foreground: RgbaColor, background: RgbaColor): RgbaColor {
+  const alpha = foreground.alpha + background.alpha * (1 - foreground.alpha);
+  if (alpha === 0) return { red: 0, green: 0, blue: 0, alpha: 0 };
+
+  return {
+    red:
+      (foreground.red * foreground.alpha +
+        background.red * background.alpha * (1 - foreground.alpha)) /
+      alpha,
+    green:
+      (foreground.green * foreground.alpha +
+        background.green * background.alpha * (1 - foreground.alpha)) /
+      alpha,
+    blue:
+      (foreground.blue * foreground.alpha +
+        background.blue * background.alpha * (1 - foreground.alpha)) /
+      alpha,
+    alpha,
+  };
+}
+
+function relativeLuminance(color: RgbaColor) {
+  const linearize = (channel: number) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+
+  return (
+    0.2126 * linearize(color.red) +
+    0.7152 * linearize(color.green) +
+    0.0722 * linearize(color.blue)
+  );
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const backgroundColor = parseCssColor(background);
+  const foregroundColor = compositeColor(parseCssColor(foreground), backgroundColor);
+  const foregroundLuminance = relativeLuminance(foregroundColor);
+  const backgroundLuminance = relativeLuminance(backgroundColor);
+
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
 }
 
 function summarizeViolations(
@@ -407,5 +494,259 @@ test.describe('accessibility smoke', () => {
     expect(copiedText).not.toBe('clipboard sentinel');
     expect(copiedText).toContain('[R20JE:COC7_IMPORT:1]');
     expect(copiedText).toContain('"character": "새로운 탐사자"');
+  });
+
+  test('computed control boundaries and placeholder text meet contrast targets', async ({ page }) => {
+    const nameInput = page.getByRole('textbox', { name: '이름', exact: true });
+    const menuButton = page.getByRole('button', { name: '사이드바 닫기' });
+
+    const [inputColors, buttonColors] = await Promise.all([
+      nameInput.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { border: style.borderTopColor, background: style.backgroundColor };
+      }),
+      menuButton.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { border: style.borderTopColor, background: style.backgroundColor };
+      }),
+    ]);
+
+    expect(contrastRatio(inputColors.border, inputColors.background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(buttonColors.border, buttonColors.background)).toBeGreaterThanOrEqual(3);
+
+    await page.getByRole('link', { name: '세션' }).click();
+    await page.getByRole('button', { name: '세션 추가' }).click();
+    const placeholderInput = page.getByRole('textbox', { name: '종류' });
+    const placeholderColors = await placeholderInput.evaluate((element) => {
+      const inputStyle = getComputedStyle(element);
+      return {
+        placeholder: getComputedStyle(element, '::placeholder').color,
+        background: inputStyle.backgroundColor,
+      };
+    });
+
+    expect(contrastRatio(placeholderColors.placeholder, placeholderColors.background)).toBeGreaterThanOrEqual(4.5);
+    await expect(placeholderInput).toHaveAttribute('placeholder', '다인 & 타이만');
+    await expect(nameInput).toBeAttached();
+    await expect(menuButton).toBeAttached();
+  });
+
+  test('every core control type exposes a three-pixel keyboard focus indicator', async ({ page }) => {
+    const samples = [
+      page.getByRole('button', { name: '사이드바 닫기' }),
+      page.getByRole('link', { name: '탐사자정보' }),
+      page.getByRole('textbox', { name: '이름', exact: true }),
+      page.getByRole('combobox', { name: '룰 선택' }),
+    ];
+
+    const expectFocusIndicator = async (control: Locator) => {
+      await focusWithKeyboard(page, control);
+      const focusStyle = await control.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          color: style.outlineColor,
+          offset: Number.parseFloat(style.outlineOffset),
+          style: style.outlineStyle,
+          width: Number.parseFloat(style.outlineWidth),
+        };
+      });
+
+      expect(focusStyle.width).toBeGreaterThanOrEqual(3);
+      expect(focusStyle.style).toBe('solid');
+      expect(parseCssColor(focusStyle.color).alpha).toBeGreaterThan(0);
+      expect(focusStyle.offset).toBeGreaterThanOrEqual(2);
+    };
+
+    for (const control of samples) {
+      await expectFocusIndicator(control);
+    }
+
+    await page.getByRole('link', { name: '메모' }).click();
+    await expectFocusIndicator(page.getByRole('textbox', { name: '내용' }));
+  });
+
+  test('the custom search wrapper visibly follows keyboard focus', async ({ page }) => {
+    await page.getByRole('link', { name: '기능치' }).click();
+    const searchInput = page.getByRole('searchbox', { name: '기능치 검색' });
+    await searchInput.focus();
+
+    const focusStyles = await page.locator('.search-field').evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        color: style.outlineColor,
+        offset: Number.parseFloat(style.outlineOffset),
+        style: style.outlineStyle,
+        width: Number.parseFloat(style.outlineWidth),
+      };
+    });
+
+    expect(focusStyles.width).toBeGreaterThanOrEqual(3);
+    expect(focusStyles.style).toBe('solid');
+    expect(parseCssColor(focusStyles.color).alpha).toBeGreaterThan(0);
+    expect(focusStyles.offset).toBeGreaterThanOrEqual(2);
+  });
+
+  test('forced colors preserves focus and selected-state shape without decorative markers', async ({ page }) => {
+    await page.emulateMedia({ forcedColors: 'active' });
+    await page.getByRole('link', { name: '전투' }).click();
+
+    const menuButton = page.getByRole('button', { name: '사이드바 닫기' });
+    await focusWithKeyboard(page, menuButton);
+    const focusStyle = await menuButton.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        style: style.outlineStyle,
+        width: Number.parseFloat(style.outlineWidth),
+      };
+    });
+    expect(focusStyle.width).toBeGreaterThanOrEqual(3);
+    expect(focusStyle.style).toBe('solid');
+
+    const selectedTab = page.getByRole('tab', { name: '무기' });
+    const pressedFilter = page.getByRole('button', { name: '근거리', pressed: true });
+    for (const selectedControl of [selectedTab, pressedFilter]) {
+      const selectedStyle = await selectedControl.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          borderBottomStyle: style.borderBottomStyle,
+          borderBottomWidth: Number.parseFloat(style.borderBottomWidth),
+          fontWeight: Number.parseInt(style.fontWeight, 10),
+          markerAfter: getComputedStyle(element, '::after').content,
+          markerBefore: getComputedStyle(element, '::before').content,
+        };
+      });
+
+      expect(selectedStyle.borderBottomWidth).toBeGreaterThanOrEqual(3);
+      expect(selectedStyle.borderBottomStyle).toBe('solid');
+      expect(selectedStyle.fontWeight).toBeGreaterThanOrEqual(700);
+      expect(['none', 'normal']).toContain(selectedStyle.markerBefore);
+      expect(['none', 'normal']).toContain(selectedStyle.markerAfter);
+    }
+  });
+
+  test('reduced motion removes smooth scrolling and non-essential transitions', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
+    const motionStyles = await page.evaluate(() => {
+      const shell = document.querySelector('.app-shell');
+      const chevron = document.querySelector('.section-chevron');
+      if (!shell || !chevron) throw new Error('Missing motion samples');
+
+      return {
+        scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior,
+        shellAnimation: getComputedStyle(shell).animationName,
+        shellTransition: getComputedStyle(shell).transitionDuration,
+        chevronTransition: getComputedStyle(chevron).transitionDuration,
+      };
+    });
+
+    expect(motionStyles.scrollBehavior).toBe('auto');
+    expect(motionStyles.shellAnimation).toBe('none');
+    expect(motionStyles.shellTransition).toBe('0s');
+    expect(motionStyles.chevronTransition).toBe('0s');
+  });
+
+  test('closed native dialogs stay hidden and open dialogs use the intended grid layout', async ({ page }) => {
+    await page.getByRole('button', { name: '초기화' }).click();
+    const resetDialog = page.getByRole('dialog', { name: '시트 초기화' });
+    await expect(resetDialog).toHaveClass(/\bmodal-dialog\b/);
+    await page.keyboard.press('Escape');
+
+    const dialogDisplays = await page.evaluate(() => {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'modal-dialog secret-dice-dialog';
+      document.body.append(dialog);
+      const closed = getComputedStyle(dialog).display;
+      dialog.setAttribute('open', '');
+      const open = getComputedStyle(dialog).display;
+      dialog.remove();
+      return { closed, open };
+    });
+
+    expect(dialogDisplays.closed).toBe('none');
+    expect(dialogDisplays.open).toBe('grid');
+  });
+
+  test('toolbar labels and primary targets remain visible and usable', async ({ page }) => {
+    const toolbar = page.getByLabel('시트 도구');
+    const toolbarButtons = toolbar.getByRole('button');
+    expect(await toolbarButtons.count()).toBeGreaterThan(0);
+
+    for (let index = 0; index < (await toolbarButtons.count()); index += 1) {
+      const button = toolbarButtons.nth(index);
+      const visibleLabel = button.locator('span');
+      await expect(visibleLabel).toBeVisible();
+      expect((await visibleLabel.textContent())?.trim()).not.toBe('');
+
+      const geometry = await button.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        height: element.getBoundingClientRect().height,
+        right: element.getBoundingClientRect().right,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(geometry.height).toBeGreaterThanOrEqual(44);
+      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
+      expect(geometry.right).toBeLessThanOrEqual((page.viewportSize()?.width ?? 0) + 1);
+    }
+
+    const primaryTargets = [
+      page.getByRole('combobox', { name: '룰 선택' }),
+      page.getByRole('link', { name: '탐사자정보' }),
+      page.getByRole('textbox', { name: '이름', exact: true }),
+    ];
+    for (const target of primaryTargets) {
+      expect(await target.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test('long dice labels wrap instead of truncating', async ({ page }) => {
+    await page.getByRole('button', { name: '비밀 주사위 복사' }).click();
+    const optionLabel = page.locator('.secret-dice-option strong').first();
+    const labelStyle = await optionLabel.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        overflow: style.overflow,
+        overflowWrap: style.overflowWrap,
+        textOverflow: style.textOverflow,
+        whiteSpace: style.whiteSpace,
+      };
+    });
+
+    expect(labelStyle.overflowWrap).toBe('anywhere');
+    expect(labelStyle.whiteSpace).not.toBe('nowrap');
+    expect(labelStyle.textOverflow).not.toBe('ellipsis');
+    expect(labelStyle.overflow).not.toBe('hidden');
+  });
+
+  test('text spacing overrides do not create document overflow or hide toolbar labels', async ({ page }) => {
+    await page.addStyleTag({
+      content: `
+        * {
+          letter-spacing: 0.12em !important;
+          line-height: 1.5 !important;
+          word-spacing: 0.16em !important;
+        }
+        p { margin-bottom: 2em !important; }
+      `,
+    });
+    await page.getByRole('link', { name: '기능치' }).click();
+
+    const layout = await page.evaluate(() => {
+      const toolbarLabels = Array.from(document.querySelectorAll('.toolbar .icon-button span'));
+      return {
+        bodyClientWidth: document.body.clientWidth,
+        bodyScrollWidth: document.body.scrollWidth,
+        documentClientWidth: document.documentElement.clientWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        toolbarLabelsVisible: toolbarLabels.every((label) => {
+          const rect = label.getBoundingClientRect();
+          return getComputedStyle(label).display !== 'none' && rect.width > 0 && rect.height > 0;
+        }),
+      };
+    });
+
+    expect(layout.documentScrollWidth).toBeLessThanOrEqual(layout.documentClientWidth);
+    expect(layout.bodyScrollWidth).toBeLessThanOrEqual(layout.bodyClientWidth);
+    expect(layout.toolbarLabelsVisible).toBe(true);
   });
 });

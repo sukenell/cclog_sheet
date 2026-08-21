@@ -5,6 +5,9 @@
   --panel-2: #30343d;
   --panel-3: #3a3f4a;
   --line: #515966;
+  --control-border: #8795aa;
+  --focus-ring: #8df0c1;
+  --placeholder: #98a5b5;
   --text: #f5f7f4;
   --muted: #aeb8c5;
   --green: #68c870;
@@ -43,12 +46,12 @@ select {
 }
 
 button {
-  border: 1px solid rgb(255 255 255 / 0.12);
+  border: 1px solid var(--control-border);
   border-radius: 7px;
   background: var(--panel-3);
   color: var(--text);
   cursor: pointer;
-  min-height: 38px;
+  min-height: 44px;
 }
 
 button:hover {
@@ -61,17 +64,22 @@ textarea,
 select {
   width: 100%;
   min-width: 0;
-  border: 1px solid #444b56;
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: #151920;
   color: var(--text);
-  outline: none;
 }
 
 input,
 select {
-  height: 39px;
+  height: 44px;
   padding: 0 11px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
 }
 
 textarea {
@@ -81,11 +89,16 @@ textarea {
   line-height: 1.5;
 }
 
-input:focus,
-textarea:focus,
-select:focus {
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   border-color: var(--mint);
   box-shadow: 0 0 0 3px rgb(141 240 193 / 0.12);
+}
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 input[readonly],
@@ -199,7 +212,7 @@ select:disabled {
   height: 32px;
   min-height: 32px;
   padding: 0;
-  border-color: rgb(141 240 193 / 0.24);
+  border-color: var(--control-border);
   background: rgb(141 240 193 / 0.08);
   color: var(--mint);
   text-decoration: none;
@@ -223,10 +236,10 @@ select:disabled {
 }
 
 .game-system-select {
-  height: 32px;
+  height: 44px;
   padding: 0 9px;
   width: min(100%, 150px);
-  border-color: rgb(141 240 193 / 0.34);
+  border-color: var(--control-border);
   background: rgb(21 25 32 / 0.96);
   color: var(--mint);
   font-size: 0.82rem;
@@ -246,7 +259,7 @@ select:disabled {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 12px;
   border-radius: 7px;
   color: #dce4ed;
@@ -290,12 +303,12 @@ select:disabled {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
-  border-color: rgb(255 255 255 / 0.1);
+  border-color: var(--control-border);
   background: #22262e;
 }
 
@@ -345,23 +358,22 @@ select:disabled {
 }
 
 .icon-button.save {
-  border-color: rgb(104 200 112 / 0.5);
+  border-color: var(--control-border);
   background: rgb(104 200 112 / 0.22);
 }
 
 .icon-button.danger,
 .icon-only.danger {
-  border-color: rgb(242 109 109 / 0.35);
+  border-color: var(--control-border);
   color: #ffd4d4;
 }
 
 .secret-dice-dialog {
-  display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   width: min(860px, 100%);
   max-height: min(760px, 86vh);
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 0.14);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background: #24272e;
   box-shadow: var(--shadow);
@@ -385,10 +397,9 @@ dialog.reset-dialog::backdrop {
 }
 
 .coc-export-dialog {
-  display: grid;
   width: min(520px, 100%);
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 0.14);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background: #24272e;
   box-shadow: var(--shadow);
@@ -397,14 +408,17 @@ dialog.reset-dialog::backdrop {
 
 .insane-password-dialog,
 .reset-dialog {
-  display: grid;
   width: min(430px, 100%);
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 0.14);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background: #24272e;
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+
+.modal-dialog[open] {
+  display: grid;
 }
 
 .dialog-form {
@@ -522,10 +536,11 @@ dialog.reset-dialog::backdrop {
 
 .secret-dice-option strong {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+  overflow-wrap: anywhere;
   font-size: 0.9rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .secret-dice-option span {
@@ -765,8 +780,8 @@ dialog.reset-dialog::backdrop {
 }
 
 .section-actions button {
-  height: 36px;
-  min-height: 36px;
+  height: 44px;
+  min-height: 44px;
 }
 
 .basic-grid {
@@ -1211,10 +1226,16 @@ dialog.reset-dialog::backdrop {
   display: flex;
   align-items: center;
   min-width: min(330px, 100%);
-  border: 1px solid #444b56;
+  border: 1px solid var(--control-border);
   border-radius: 7px;
   background: #151920;
   padding-left: 10px;
+}
+
+.search-field:focus-within {
+  border-color: var(--focus-ring);
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 .search-field label {
@@ -1238,7 +1259,7 @@ dialog.reset-dialog::backdrop {
 }
 
 .category-tabs button {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 10px;
   color: var(--muted);
 }
@@ -1426,7 +1447,7 @@ td {
 }
 
 .combat-tabs button {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 14px;
   color: var(--muted);
 }
@@ -1995,8 +2016,11 @@ td {
 }
 
 @media (max-width: 520px) {
-  .icon-button span {
-    display: none;
+  .toolbar .icon-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .sidebar a {
@@ -2010,5 +2034,50 @@ td {
 
   .interest-point-note {
     min-height: auto;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --control-border: ButtonText;
+    --focus-ring: Highlight;
+    --placeholder: GrayText;
+  }
+
+  button,
+  input,
+  select,
+  textarea,
+  .search-field,
+  .modal-dialog[open] {
+    border-color: ButtonText;
+  }
+
+  :where(button, a, input, select, textarea):focus-visible,
+  .search-field:focus-within {
+    outline-color: Highlight;
+  }
+
+  .category-tabs button[aria-pressed='true'],
+  .combat-tabs [role='tab'][aria-selected='true'] {
+    border: 2px solid ButtonText;
+    border-bottom: 4px solid Highlight;
+    background: Canvas;
+    color: CanvasText;
+    font-weight: 800;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
   }
 }

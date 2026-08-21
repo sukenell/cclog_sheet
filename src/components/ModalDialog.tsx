@@ -30,6 +30,7 @@ export function ModalDialog({
   initialFocusRef,
   onClose,
   children,
+  className,
   ...dialogProps
 }: ModalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -75,6 +76,7 @@ export function ModalDialog({
     <dialog
       {...dialogProps}
       ref={dialogRef}
+      className={['modal-dialog', className].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
       onClose={() => {

@@ -1476,6 +1476,7 @@ function App() {
               title="초기화"
             >
               <RotateCcw size={18} />
+              <span>초기화</span>
             </button>
             {resetSnapshot && (
               <button
