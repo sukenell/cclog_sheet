@@ -126,12 +126,13 @@ Playwright의 role/name locator와 Chromium 키보드 동작은 접근성 의미
 ## 재검증 절차
 
 ```bash
-npm install
+npm ci
+npx playwright install chromium
 npm test
 npm run typecheck
 npm run build
 npm run test:a11y
-git diff --check
+git log --check --oneline --all
 ```
 
 수동으로는 다음 순서로 확인한다.
