@@ -230,7 +230,9 @@ describe('topbar archive controls', () => {
     expect(source).toContain('isInsaneAbilityPasswordDialogOpen');
     expect(source).toContain('InsaneAbilityPasswordDialog');
     expect(source).toContain('confirmInsaneAbilityPassword');
-    expect(source).toContain('cancelInsaneAbilityPassword');
+    expect(source).toContain('closeInsaneAbilityPassword');
+    expect(source).toContain('method="dialog"');
+    expect(source).toContain('labelledBy="insane-password-title"');
     expect(source).toContain('type="password"');
     expect(source).toContain('어빌리티 자동 불러오기 활성화(취소를 누르면 비활성화 됩니다.)');
     expect(source).toContain(
@@ -308,8 +310,9 @@ describe('topbar archive controls', () => {
     expect(source).toContain('buildSecretDiceRollOptions');
     expect(source).toContain('serializeSecretDiceImport');
     expect(secretDiceButtonIndex).toBeGreaterThan(paletteButtonIndex);
-    expect(source).toContain('title="비밀 주사위를 복사"');
-    expect(source).toContain('role="dialog"');
+    expect(source).toContain('title="비밀 주사위 복사"');
+    expect(source).toContain('labelledBy="secret-dice-title"');
+    expect(source).toContain('describedBy="secret-dice-description"');
     expect(source).toContain('전체 선택');
     expect(source).toContain('전체 해제');
     expect(source).toContain('characterName={topbarTitle}');

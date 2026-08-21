@@ -141,6 +141,7 @@ import {
   normalizeAppBasePath,
   type AppPage,
 } from './lib/appRoutes';
+import { ModalDialog } from './components/ModalDialog';
 
 interface SheetState {
   basic: BasicInfo;
@@ -169,6 +170,13 @@ type SheetStateArchive = Partial<Omit<SheetState, 'weapons' | 'armors' | 'spells
 
 type CombatTab = 'weapons' | 'armor' | 'spells';
 type GameSystem = 'coc7' | 'coc6' | 'insan';
+type ResetSnapshot = {
+  gameSystem: GameSystem;
+  sheet: SheetState;
+  insaneSheet: InsaneSheetState | null;
+  growthMessage: string;
+  growthResults: GrowthResult[];
+};
 const combatTabOptions: readonly { id: CombatTab; label: string }[] = [
   { id: 'weapons', label: '무기' },
   { id: 'armor', label: '방어구' },
@@ -344,11 +352,17 @@ function App() {
   const [isCocExportDialogOpen, setIsCocExportDialogOpen] = useState(false);
   const [isInsaneAbilityPasswordDialogOpen, setIsInsaneAbilityPasswordDialogOpen] =
     useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [resetSnapshot, setResetSnapshot] = useState<ResetSnapshot | null>(null);
   const [insaneAbilityPasswordDraft, setInsaneAbilityPasswordDraft] = useState('');
   const [isInsaneAbilityPresetUnlocked, setIsInsaneAbilityPresetUnlocked] = useState(false);
   const [insaneAbilityPresets, setLoadedInsaneAbilityPresets] = useState<InsaneAbilityPreset[]>([]);
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const resetButtonRef = useRef<HTMLButtonElement>(null);
+  const pendingInsanePasswordSubmitRef = useRef<boolean | null>(null);
+  const resetDataChangeSuppressionRef = useRef(0);
+  const previousResetDataRef = useRef({ sheet, insaneSheet });
 
   const isInsaneMode = isInsaneEnabled && gameSystem === 'insan' && insaneSheet !== null;
   const cocEdition = getCocEdition(gameSystem);
@@ -446,6 +460,24 @@ function App() {
   }, [gameSystem]);
 
   useEffect(() => {
+    const previous = previousResetDataRef.current;
+    const hasDataChanged = previous.sheet !== sheet || previous.insaneSheet !== insaneSheet;
+    previousResetDataRef.current = { sheet, insaneSheet };
+
+    if (!hasDataChanged) return;
+
+    if (resetDataChangeSuppressionRef.current > 0) {
+      resetDataChangeSuppressionRef.current -= 1;
+      return;
+    }
+
+    if (resetSnapshot) {
+      setResetSnapshot(null);
+      setToolbarMessage('');
+    }
+  }, [insaneSheet, resetSnapshot, sheet]);
+
+  useEffect(() => {
     let isMounted = true;
     if (!isInsaneEnabled) return undefined;
 
@@ -465,10 +497,14 @@ function App() {
     setIsSecretDiceDialogOpen(false);
     setIsCocExportDialogOpen(false);
     setIsInsaneAbilityPasswordDialogOpen(false);
+    setIsResetDialogOpen(false);
+    setResetSnapshot(null);
   }, [gameSystem]);
 
   useEffect(() => {
     function handlePopState() {
+      setResetSnapshot(null);
+      setToolbarMessage('');
       setActivePage(getAppPageFromPath(window.location.pathname, appBasePath));
     }
 
@@ -546,6 +582,8 @@ function App() {
 
     if (currentPath !== nextPath) {
       window.history.pushState(null, '', nextPath);
+      setResetSnapshot(null);
+      setToolbarMessage('');
     }
 
     setActivePage(page);
@@ -600,6 +638,7 @@ function App() {
     if (availableNextSystem === 'insan' && !isInsaneAbilityPresetUnlocked) {
       setInsaneSheet((current) => current ?? loadInsaneSheet());
       setInsaneAbilityPasswordDraft('');
+      pendingInsanePasswordSubmitRef.current = null;
       setIsInsaneAbilityPasswordDialogOpen(true);
       return;
     }
@@ -626,15 +665,15 @@ function App() {
   }
 
   function confirmInsaneAbilityPassword() {
-    const isPasswordAccepted =
+    pendingInsanePasswordSubmitRef.current =
       Boolean(insaneAbilityPresetPassword) &&
       insaneAbilityPasswordDraft.trim() === insaneAbilityPresetPassword;
-
-    openInsaneSheetWithAbilityLock(isPasswordAccepted);
   }
 
-  function cancelInsaneAbilityPassword() {
-    openInsaneSheetWithAbilityLock(false);
+  function closeInsaneAbilityPassword() {
+    const isPasswordAccepted = pendingInsanePasswordSubmitRef.current ?? false;
+    pendingInsanePasswordSubmitRef.current = null;
+    openInsaneSheetWithAbilityLock(isPasswordAccepted);
   }
 
   function updateStat(key: StatKey | 'luck', value: string) {
@@ -1023,17 +1062,45 @@ function App() {
     setToolbarMessage('');
   }
 
-  function resetSheet() {
+  function openResetDialog() {
+    setIsResetDialogOpen(true);
+  }
+
+  function confirmResetSheet() {
+    setResetSnapshot({
+      gameSystem,
+      sheet,
+      insaneSheet,
+      growthMessage,
+      growthResults,
+    });
+    resetDataChangeSuppressionRef.current += 1;
+
     if (isInsaneMode) {
       setInsaneSheet(createInitialInsaneSheet());
-      setToolbarMessage('');
-      return;
+    } else {
+      setSheet(createInitialSheet(cocEdition));
+      setGrowthMessage('');
+      setGrowthResults([]);
     }
 
-    setSheet(createInitialSheet(cocEdition));
-    setGrowthMessage('');
-    setGrowthResults([]);
-    setToolbarMessage('');
+    setToolbarMessage('시트를 초기화했습니다. 다음 수정 전까지 실행 취소할 수 있습니다.');
+    setIsResetDialogOpen(false);
+  }
+
+  function undoResetSheet() {
+    if (!resetSnapshot) return;
+
+    resetDataChangeSuppressionRef.current += 1;
+    setGameSystem(resetSnapshot.gameSystem);
+    setSheet(resetSnapshot.sheet);
+    setInsaneSheet(resetSnapshot.insaneSheet);
+    setGrowthMessage(resetSnapshot.growthMessage);
+    setGrowthResults(resetSnapshot.growthResults);
+    setResetSnapshot(null);
+    setToolbarMessage('초기화를 실행 취소했습니다.');
+
+    window.requestAnimationFrame(() => resetButtonRef.current?.focus());
   }
 
   const topbarTitle =
@@ -1188,7 +1255,7 @@ function App() {
                   type="button"
                   className="icon-button"
                   onClick={openSecretDiceDialog}
-                  title="비밀 주사위를 복사"
+                  title="비밀 주사위 복사"
                 >
                   <Dice6 size={18} />
                   <span>비밀 주사위 복사</span>
@@ -1196,9 +1263,26 @@ function App() {
               </>
             )}
             {/* 저장됨 버튼은 기능치 확정 전까지 숨김. */}
-            <button type="button" className="icon-button danger" onClick={resetSheet} title="초기화">
+            <button
+              ref={resetButtonRef}
+              type="button"
+              className="icon-button danger"
+              onClick={openResetDialog}
+              title="초기화"
+            >
               <RotateCcw size={18} />
             </button>
+            {resetSnapshot && (
+              <button
+                type="button"
+                className="icon-button"
+                onClick={undoResetSheet}
+                title="초기화 실행 취소"
+              >
+                <RotateCcw size={18} />
+                <span>초기화 실행 취소</span>
+              </button>
+            )}
             </div>
           ) : (
             <div className="toolbar" aria-label="사용방법 도구">
@@ -1245,7 +1329,15 @@ function App() {
             value={insaneAbilityPasswordDraft}
             onChange={setInsaneAbilityPasswordDraft}
             onConfirm={confirmInsaneAbilityPassword}
-            onCancel={cancelInsaneAbilityPassword}
+            onClose={closeInsaneAbilityPassword}
+          />
+        )}
+
+        {isResetDialogOpen && (
+          <ResetDialog
+            systemLabel={isInsaneMode ? 'InSane' : gameSystem === 'coc6' ? 'COC 6판' : 'COC 7판'}
+            onConfirm={confirmResetSheet}
+            onClose={() => setIsResetDialogOpen(false)}
           />
         )}
 
@@ -1952,43 +2044,47 @@ function CocExportDialog({
   onExportCharacteristicsOnly: () => void;
   onClose: () => void;
 }) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section
-        className="coc-export-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="coc-export-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="secret-dice-header">
-          <div>
-            <h2 id="coc-export-title">COC 세이브</h2>
-            <strong className="secret-dice-character">
-              {editionLabel} · {characterName}
-            </strong>
-          </div>
-          <button type="button" className="icon-only" onClick={onClose} title="닫기">
-            <X size={16} />
-          </button>
-        </header>
+  const initialFocusRef = useRef<HTMLButtonElement>(null);
 
-        <div className="coc-export-options">
-          <button type="button" onClick={onExportFull}>
-            <Download size={17} />
-            <span>전체 세이브</span>
-          </button>
-          <button type="button" onClick={onExportInvestedSkills}>
-            <BookOpen size={17} />
-            <span>투자 기능치만 세이브</span>
-          </button>
-          <button type="button" onClick={onExportCharacteristicsOnly}>
-            <Sparkles size={17} />
-            <span>특성치만 세이브</span>
-          </button>
+  return (
+    <ModalDialog
+      open
+      className="coc-export-dialog"
+      labelledBy="coc-export-title"
+      describedBy="coc-export-description"
+      initialFocusRef={initialFocusRef}
+      onClose={onClose}
+    >
+      <header className="secret-dice-header">
+        <div>
+          <h2 id="coc-export-title">COC 세이브</h2>
+          <strong className="secret-dice-character">
+            {editionLabel} · {characterName}
+          </strong>
         </div>
-      </section>
-    </div>
+        <button type="button" className="icon-only" onClick={onClose} title="닫기">
+          <X size={16} />
+        </button>
+      </header>
+
+      <p id="coc-export-description" className="dialog-description">
+        현재 COC 시트에서 저장할 데이터 범위를 선택하세요.
+      </p>
+      <div className="coc-export-options">
+        <button ref={initialFocusRef} type="button" onClick={onExportFull}>
+          <Download size={17} />
+          <span>전체 세이브</span>
+        </button>
+        <button type="button" onClick={onExportInvestedSkills}>
+          <BookOpen size={17} />
+          <span>투자 기능치만 세이브</span>
+        </button>
+        <button type="button" onClick={onExportCharacteristicsOnly}>
+          <Sparkles size={17} />
+          <span>특성치만 세이브</span>
+        </button>
+      </div>
+    </ModalDialog>
   );
 }
 
@@ -2013,70 +2109,73 @@ function SecretDiceDialog({
   onCopyBonus: () => void;
   onClose: () => void;
 }) {
+  const initialFocusRef = useRef<HTMLButtonElement>(null);
   const selectedIdSet = new Set(selectedIds);
   const statOptions = options.filter((option) => option.kind === 'stat');
   const skillOptions = options.filter((option) => option.kind === 'skill');
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section
-        className="secret-dice-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="secret-dice-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="secret-dice-header">
-          <div>
-            <h2 id="secret-dice-title">비밀 주사위 복사</h2>
-            <strong className="secret-dice-character">복사 대상 {characterName}</strong>
-            <p>
-              {selectedIds.length}/{options.length} 선택
-            </p>
-          </div>
-          <button type="button" className="icon-only" onClick={onClose} title="닫기">
-            <X size={16} />
-          </button>
-        </header>
-
-        <div className="secret-dice-controls">
-          <button type="button" onClick={onSelectAll}>
-            <Check size={16} />
-            전체 선택
-          </button>
-          <button type="button" onClick={onClearAll}>
-            <X size={16} />
-            전체 해제
-          </button>
+    <ModalDialog
+      open
+      className="secret-dice-dialog"
+      labelledBy="secret-dice-title"
+      describedBy="secret-dice-description"
+      initialFocusRef={initialFocusRef}
+      onClose={onClose}
+    >
+      <header className="secret-dice-header">
+        <div>
+          <h2 id="secret-dice-title">비밀 주사위 복사</h2>
+          <strong className="secret-dice-character">복사 대상 {characterName}</strong>
+          <p>
+            {selectedIds.length}/{options.length} 선택
+          </p>
         </div>
+        <button type="button" className="icon-only" onClick={onClose} title="닫기">
+          <X size={16} />
+        </button>
+      </header>
 
-        <div className="secret-dice-option-groups">
-          <SecretDiceOptionGroup
-            title="특성치"
-            options={statOptions}
-            selectedIdSet={selectedIdSet}
-            onToggleOption={onToggleOption}
-          />
-          <SecretDiceOptionGroup
-            title="기능치"
-            options={skillOptions}
-            selectedIdSet={selectedIdSet}
-            onToggleOption={onToggleOption}
-          />
-        </div>
+      <p id="secret-dice-description" className="dialog-description">
+        복사할 특성치와 기능치를 선택한 뒤 주사위 형식을 선택하세요.
+      </p>
+      <div className="secret-dice-controls">
+        <button ref={initialFocusRef} type="button" onClick={onSelectAll}>
+          <Check size={16} />
+          전체 선택
+        </button>
+        <button type="button" onClick={onClearAll}>
+          <X size={16} />
+          전체 해제
+        </button>
+      </div>
 
-        <footer className="secret-dice-actions">
-          <button type="button" onClick={onCopyNormal}>
-            <Dice6 size={16} />
-            일반 주사위 복사
-          </button>
-          <button type="button" onClick={onCopyBonus}>
-            <Dice6 size={16} />
-            보정 주사위 복사
-          </button>
-        </footer>
-      </section>
-    </div>
+      <div className="secret-dice-option-groups">
+        <SecretDiceOptionGroup
+          title="특성치"
+          options={statOptions}
+          selectedIdSet={selectedIdSet}
+          onToggleOption={onToggleOption}
+        />
+        <SecretDiceOptionGroup
+          title="기능치"
+          options={skillOptions}
+          selectedIdSet={selectedIdSet}
+          onToggleOption={onToggleOption}
+        />
+      </div>
+
+      <footer className="secret-dice-actions">
+        <button type="button" onClick={onCopyNormal}>
+          <Dice6 size={16} />
+          일반 주사위 복사
+        </button>
+        <button type="button" onClick={onCopyBonus}>
+          <Dice6 size={16} />
+          보정 주사위 복사
+        </button>
+      </footer>
+    </ModalDialog>
   );
 }
 
@@ -2084,34 +2183,37 @@ function InsaneAbilityPasswordDialog({
   value,
   onChange,
   onConfirm,
-  onCancel,
+  onClose,
 }: {
   value: string;
   onChange: (value: string) => void;
   onConfirm: () => void;
-  onCancel: () => void;
+  onClose: () => void;
 }) {
+  const initialFocusRef = useRef<HTMLInputElement>(null);
+
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <ModalDialog
+      open
+      className="insane-password-dialog"
+      labelledBy="insane-password-title"
+      describedBy="insane-password-description"
+      initialFocusRef={initialFocusRef}
+      onClose={onClose}
+    >
       <form
-        className="insane-password-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="insane-password-title"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onConfirm();
-        }}
-        onClick={(event) => event.stopPropagation()}
+        className="dialog-form"
+        method="dialog"
+        onSubmit={onConfirm}
       >
         <header className="secret-dice-header">
           <div>
             <h2 id="insane-password-title">InSane 어빌리티 잠금</h2>
-            <strong className="secret-dice-character">
+            <strong id="insane-password-description" className="secret-dice-character">
               어빌리티 자동 불러오기 활성화(취소를 누르면 비활성화 됩니다.)
             </strong>
           </div>
-          <button type="button" className="icon-only" onClick={onCancel} title="닫기">
+          <button type="button" className="icon-only" onClick={onClose} title="닫기">
             <X size={16} />
           </button>
         </header>
@@ -2120,16 +2222,16 @@ function InsaneAbilityPasswordDialog({
           <label className="field">
             <span>룰북 구매확인 비밀번호(*룰북 92p 주석에 적힌 숫자와 + 블데 룰북 40P 플레이어 1명 기준 리미트 숫자를 합산한 문장을 적어주세요)</span>
             <input
+              ref={initialFocusRef}
               type="password"
               value={value}
-              autoFocus
               onChange={(event) => onChange(event.target.value)}
             />
           </label>
         </div>
 
         <footer className="insane-password-actions">
-          <button type="button" onClick={onCancel}>
+          <button type="button" onClick={onClose}>
             취소
           </button>
           <button type="submit">
@@ -2137,7 +2239,51 @@ function InsaneAbilityPasswordDialog({
           </button>
         </footer>
       </form>
-    </div>
+    </ModalDialog>
+  );
+}
+
+function ResetDialog({
+  systemLabel,
+  onConfirm,
+  onClose,
+}: {
+  systemLabel: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const initialFocusRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <ModalDialog
+      open
+      className="reset-dialog"
+      labelledBy="reset-dialog-title"
+      describedBy="reset-dialog-description"
+      initialFocusRef={initialFocusRef}
+      onClose={onClose}
+    >
+      <header className="secret-dice-header">
+        <div>
+          <h2 id="reset-dialog-title">시트 초기화</h2>
+        </div>
+        <button type="button" className="icon-only" onClick={onClose} title="닫기">
+          <X size={16} />
+        </button>
+      </header>
+      <p id="reset-dialog-description" className="reset-dialog-description">
+        {systemLabel} 시트 데이터와 브라우저에 저장된 해당 데이터가 새 시트로 대체됩니다.
+        초기화 후 다음 수정 전까지 실행 취소할 수 있습니다.
+      </p>
+      <footer className="insane-password-actions">
+        <button ref={initialFocusRef} type="button" onClick={onClose}>
+          취소
+        </button>
+        <button type="button" className="danger" onClick={onConfirm}>
+          초기화 확인
+        </button>
+      </footer>
+    </ModalDialog>
   );
 }
 

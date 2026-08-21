@@ -181,4 +181,113 @@ test.describe('accessibility smoke', () => {
       );
     }
   });
+
+  test('dialog flows keep focus modal, close with Escape, and restore each invoker', async ({ page }) => {
+    const cases = [
+      { invoker: '세이브', dialog: 'COC 세이브' },
+      { invoker: '비밀 주사위 복사', dialog: '비밀 주사위 복사' },
+      { invoker: '초기화', dialog: '시트 초기화' },
+    ];
+
+    for (const testCase of cases) {
+      const invoker = page.getByRole('button', { name: testCase.invoker });
+      await invoker.click();
+      const dialog = page.getByRole('dialog', { name: testCase.dialog });
+
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute('aria-describedby', /.+/);
+      expect(await dialog.evaluate((element) => element.matches(':modal'))).toBe(true);
+      expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+      for (let tabIndex = 0; tabIndex < 8; tabIndex += 1) {
+        await page.keyboard.press('Tab');
+        expect(
+          await dialog.evaluate(
+            (element) =>
+              element.contains(document.activeElement) || document.activeElement === document.body,
+          ),
+        ).toBe(true);
+      }
+
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await expect(invoker).toBeFocused();
+    }
+  });
+
+  test('dialog native form close stays controlled and can reopen', async ({ page }) => {
+    const systemSelect = page.getByRole('combobox', { name: '룰 선택' });
+    await systemSelect.focus();
+    await systemSelect.selectOption('insan');
+    let dialog = page.getByRole('dialog', { name: 'InSane 어빌리티 잠금' });
+
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await expect(dialog.getByLabel(/룰북 구매확인 비밀번호/)).toBeFocused();
+    await dialog.evaluate((element) => {
+      element.addEventListener(
+        'close',
+        () => {
+          document.documentElement.dataset.nativeDialogClose = 'fired';
+        },
+        { once: true },
+      );
+    });
+    await dialog.getByRole('button', { name: '확인' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('html')).toHaveAttribute('data-native-dialog-close', 'fired');
+    await expect(systemSelect).toHaveValue('insan');
+
+    await systemSelect.selectOption('coc7');
+    await systemSelect.focus();
+    await systemSelect.selectOption('insan');
+    dialog = page.getByRole('dialog', { name: 'InSane 어빌리티 잠금' });
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(systemSelect).toBeFocused();
+  });
+
+  test('dialog reset cancel, confirm, undo, and later mutation have the expected lifecycle', async ({ page }) => {
+    const nameInput = page.getByRole('textbox', { name: '이름', exact: true });
+    const resetButton = page.getByRole('button', { name: '초기화' });
+    await nameInput.fill('되돌릴 탐사자');
+
+    await resetButton.click();
+    let dialog = page.getByRole('dialog', { name: '시트 초기화' });
+    await expect(dialog.getByRole('button', { name: '취소' })).toBeFocused();
+    await expect(dialog.getByRole('button', { name: '초기화 확인' })).not.toBeFocused();
+    await dialog.getByRole('button', { name: '취소' }).click();
+    await expect(nameInput).toHaveValue('되돌릴 탐사자');
+
+    await resetButton.click();
+    dialog = page.getByRole('dialog', { name: '시트 초기화' });
+    await dialog.getByRole('button', { name: '초기화 확인' }).click();
+    await expect(nameInput).toHaveValue('새로운 탐사자');
+    const undoButton = page.getByRole('button', { name: '초기화 실행 취소' });
+    await expect(undoButton).toBeVisible();
+    await undoButton.click();
+    await expect(nameInput).toHaveValue('되돌릴 탐사자');
+    await expect(resetButton).toBeFocused();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const stored = window.localStorage.getItem('cclog-sheet:v1');
+          return stored ? JSON.parse(stored).basic?.name : null;
+        }),
+      )
+      .toBe('되돌릴 탐사자');
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: '되돌릴 탐사자' })).toBeVisible();
+    await expect(nameInput).toHaveValue('되돌릴 탐사자');
+    await expect(page.getByRole('button', { name: '초기화 실행 취소' })).toBeHidden();
+
+    await resetButton.click();
+    dialog = page.getByRole('dialog', { name: '시트 초기화' });
+    await dialog.getByRole('button', { name: '초기화 확인' }).click();
+    await expect(page.getByRole('button', { name: '초기화 실행 취소' })).toBeVisible();
+    await nameInput.fill('새 탐사자');
+    await expect(page.getByRole('button', { name: '초기화 실행 취소' })).toBeHidden();
+  });
 });

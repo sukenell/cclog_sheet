@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import './test/setup';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe, { type Result as AxeViolation } from 'axe-core';
 import { describe, expect, it } from 'vitest';
@@ -549,6 +549,145 @@ describe('App accessibility smoke', () => {
     await user.click(handgunButton);
     expect(meleeButton).toHaveAttribute('aria-pressed', 'false');
     expect(handgunButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it.each([
+    {
+      invokerName: '세이브',
+      dialogName: 'COC 세이브',
+      open: async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.click(screen.getByRole('button', { name: '세이브' }));
+      },
+    },
+    {
+      invokerName: '비밀 주사위 복사',
+      dialogName: '비밀 주사위 복사',
+      open: async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.click(screen.getByRole('button', { name: '비밀 주사위 복사' }));
+      },
+    },
+    {
+      invokerName: '초기화',
+      dialogName: '시트 초기화',
+      open: async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.click(screen.getByRole('button', { name: '초기화' }));
+      },
+    },
+  ])(
+    'opens the $dialogName flow as a native modal and restores focus to $invokerName after Escape',
+    async ({ invokerName, dialogName, open }) => {
+      const user = userEvent.setup();
+      render(<App />);
+      const invoker = screen.getByRole('button', { name: invokerName });
+
+      await open(user);
+
+      const dialog = screen.getByRole<HTMLDialogElement>('dialog', { name: dialogName });
+      expect(dialog.tagName).toBe('DIALOG');
+      expect(dialog).toHaveAttribute('open');
+      expect(dialog).toHaveAccessibleDescription();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+
+      const cancelEvent = new Event('cancel', { cancelable: true });
+      fireEvent(dialog, cancelEvent);
+
+      expect(cancelEvent.defaultPrevented).toBe(true);
+      await waitFor(() => expect(dialog).not.toHaveAttribute('open'));
+      expect(invoker).toHaveFocus();
+    },
+  );
+
+  it('opens the InSane password flow as a native modal and restores focus after Escape', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const systemSelect = screen.getByRole('combobox', { name: '룰 선택' });
+
+    await user.selectOptions(systemSelect, 'insan');
+
+    const dialog = screen.getByRole<HTMLDialogElement>('dialog', {
+      name: 'InSane 어빌리티 잠금',
+    });
+    expect(dialog.tagName).toBe('DIALOG');
+    expect(dialog).toHaveAttribute('open');
+    expect(dialog).toHaveAccessibleDescription();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(screen.getByLabelText(/룰북 구매확인 비밀번호/)).toHaveFocus();
+
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+
+    await waitFor(() => expect(dialog).not.toHaveAttribute('open'));
+    expect(systemSelect).toHaveFocus();
+  });
+
+  it('protects COC reset with cancel, one-use snapshot undo, and mutation invalidation', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '/cclog_sheet/');
+    render(<App />);
+    const nameInput = screen.getByRole('textbox', { name: '이름' });
+    const resetButton = screen.getByRole('button', { name: '초기화' });
+    await user.clear(nameInput);
+    await user.type(nameInput, '되돌릴 탐사자');
+
+    await user.click(resetButton);
+    let dialog = screen.getByRole('dialog', { name: '시트 초기화' });
+    expect(dialog).toHaveAccessibleDescription(/COC 7판.*브라우저.*대체/);
+    const cancelButton = within(dialog).getByRole('button', { name: '취소' });
+    const confirmButton = within(dialog).getByRole('button', { name: '초기화 확인' });
+    expect(cancelButton).toHaveFocus();
+    expect(confirmButton).not.toHaveFocus();
+    await user.click(cancelButton);
+    expect(nameInput).toHaveValue('되돌릴 탐사자');
+    expect(resetButton).toHaveFocus();
+
+    await user.click(resetButton);
+    dialog = screen.getByRole('dialog', { name: '시트 초기화' });
+    await user.click(within(dialog).getByRole('button', { name: '초기화 확인' }));
+    expect(nameInput).toHaveValue('새로운 탐사자');
+
+    const undoButton = screen.getByRole('button', { name: '초기화 실행 취소' });
+    await user.click(undoButton);
+    expect(nameInput).toHaveValue('되돌릴 탐사자');
+    expect(screen.queryByRole('button', { name: '초기화 실행 취소' })).not.toBeInTheDocument();
+    await waitFor(() => expect(resetButton).toHaveFocus());
+    expect(screen.getByText('초기화를 실행 취소했습니다.')).toHaveAttribute('role', 'status');
+
+    await user.click(resetButton);
+    dialog = screen.getByRole('dialog', { name: '시트 초기화' });
+    await user.click(within(dialog).getByRole('button', { name: '초기화 확인' }));
+    expect(screen.getByRole('button', { name: '초기화 실행 취소' })).toBeInTheDocument();
+    await user.clear(nameInput);
+    await user.type(nameInput, '새 탐사자');
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '초기화 실행 취소' })).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText('시트를 초기화했습니다. 다음 수정 전까지 실행 취소할 수 있습니다.'),
+    ).not.toBeInTheDocument();
+
+    await user.click(resetButton);
+    dialog = screen.getByRole('dialog', { name: '시트 초기화' });
+    await user.click(within(dialog).getByRole('button', { name: '초기화 확인' }));
+    expect(screen.getByRole('button', { name: '초기화 실행 취소' })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: '메모' }));
+    expect(screen.queryByRole('button', { name: '초기화 실행 취소' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('시트를 초기화했습니다. 다음 수정 전까지 실행 취소할 수 있습니다.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('restores an InSane sheet from the reset snapshot', async () => {
+    const user = await renderOpenInsaneSheet();
+    const nameInput = screen.getByRole('textbox', { name: '이름' });
+    await user.type(nameInput, '되돌릴 봉마인');
+
+    await user.click(screen.getByRole('button', { name: '초기화' }));
+    const dialog = screen.getByRole('dialog', { name: '시트 초기화' });
+    expect(dialog).toHaveAccessibleDescription(/InSane.*브라우저.*대체/);
+    await user.click(within(dialog).getByRole('button', { name: '초기화 확인' }));
+    expect(nameInput).toHaveValue('');
+
+    await user.click(screen.getByRole('button', { name: '초기화 실행 취소' }));
+    expect(nameInput).toHaveValue('되돌릴 봉마인');
   });
 
   it('has no serious or critical axe violations with every sheet section open', async () => {
