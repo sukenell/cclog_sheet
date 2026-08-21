@@ -1961,6 +1961,18 @@ td {
   }
 }
 
+@media (max-height: 420px) {
+  .secret-dice-dialog {
+    grid-template-rows: repeat(5, auto);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .secret-dice-option-groups {
+    overflow: visible;
+  }
+}
+
 @media (max-width: 780px) {
   .sheet-main {
     padding: 12px;

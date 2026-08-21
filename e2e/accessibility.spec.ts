@@ -882,6 +882,71 @@ test.describe('accessibility smoke', () => {
     }
   });
 
+  test('secret dice options remain operable without overlapping the footer', async ({ page }) => {
+    await page.getByRole('button', { name: '비밀 주사위 복사' }).click();
+    const dialog = page.getByRole('dialog', { name: '비밀 주사위 복사' });
+    const optionRegion = dialog.locator('.secret-dice-option-groups');
+    const footer = dialog.locator('.secret-dice-actions');
+    const firstCheckbox = dialog.locator('.secret-dice-option input').first();
+
+    const readGeometry = () =>
+      dialog.evaluate((element) => {
+        const dialogRect = element.getBoundingClientRect();
+        const options = element.querySelector<HTMLElement>('.secret-dice-option-groups');
+        const footerElement = element.querySelector<HTMLElement>('.secret-dice-actions');
+        const checkbox = element.querySelector<HTMLInputElement>('.secret-dice-option input');
+        if (!options || !footerElement || !checkbox) {
+          throw new Error('Missing secret dice dialog region');
+        }
+
+        const optionsRect = options.getBoundingClientRect();
+        const footerRect = footerElement.getBoundingClientRect();
+        const checkboxRect = checkbox.getBoundingClientRect();
+        return {
+          dialog: {
+            bottom: dialogRect.bottom,
+            clientHeight: element.clientHeight,
+            overflowY: getComputedStyle(element).overflowY,
+            scrollHeight: element.scrollHeight,
+            top: dialogRect.top,
+          },
+          options: {
+            bottom: optionsRect.bottom,
+            clientHeight: options.clientHeight,
+            scrollHeight: options.scrollHeight,
+            top: optionsRect.top,
+          },
+          footer: { top: footerRect.top },
+          checkbox: { bottom: checkboxRect.bottom, top: checkboxRect.top },
+        };
+      });
+
+    const beforeInteraction = await readGeometry();
+    expect
+      .soft(beforeInteraction.options.bottom, 'option region overlaps the footer')
+      .toBeLessThanOrEqual(beforeInteraction.footer.top + 1);
+    if (beforeInteraction.dialog.scrollHeight > beforeInteraction.dialog.clientHeight) {
+      expect.soft(['auto', 'scroll']).toContain(beforeInteraction.dialog.overflowY);
+    }
+
+    await expect(firstCheckbox).toBeChecked();
+    await firstCheckbox.click({ timeout: 2_000 });
+    await expect(firstCheckbox).not.toBeChecked();
+
+    await focusWithKeyboard(page, firstCheckbox);
+    await page.keyboard.press('Space');
+    await expect(firstCheckbox).toBeChecked();
+
+    const afterInteraction = await readGeometry();
+    expect(afterInteraction.options.bottom).toBeLessThanOrEqual(afterInteraction.footer.top + 1);
+    expect(afterInteraction.checkbox.top).toBeGreaterThanOrEqual(afterInteraction.dialog.top - 1);
+    expect(afterInteraction.checkbox.bottom).toBeLessThanOrEqual(
+      afterInteraction.dialog.bottom + 1,
+    );
+    await expect(optionRegion).toBeVisible();
+    await expect(footer).toBeVisible();
+  });
+
   test('non-table field actions keep a 44-pixel target', async ({ page }) => {
     const addPortrait = page.locator('.field-label-row').getByRole('button', { name: '추가' });
 
