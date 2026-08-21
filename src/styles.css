@@ -661,7 +661,7 @@ select:disabled {
 
 .panel {
   min-width: 0;
-  scroll-margin-top: 96px;
+  scroll-margin-top: 144px;
   border: 1px solid rgb(255 255 255 / 0.11);
   border-radius: 8px;
   background: rgb(36 39 46 / 0.92);

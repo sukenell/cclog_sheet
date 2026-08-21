@@ -76,36 +76,109 @@ test.describe('accessibility smoke', () => {
     await expect(sectionToggle).toBeFocused();
     await expect(page).toHaveURL(/#skills$/);
 
-    const positions = await page.evaluate(() => {
-      const target = document.getElementById('skills');
-      const topbar = document.querySelector('.topbar');
-      if (!target || !topbar) return null;
+    const readPositions = () =>
+      page.evaluate(() => {
+        const section = document.getElementById('skills');
+        const target = section?.querySelector('.section-toggle');
+        const topbar = document.querySelector('.topbar');
+        if (!section || !target || !topbar) return null;
 
-      return {
-        targetTop: target.getBoundingClientRect().top,
-        topbarBottom: topbar.getBoundingClientRect().bottom,
-        scrollMarginTop: Number.parseFloat(getComputedStyle(target).scrollMarginTop),
-      };
-    });
+        const targetRect = target.getBoundingClientRect();
+
+        return {
+          targetTop: targetRect.top,
+          targetBottom: targetRect.bottom,
+          topbarBottom: topbar.getBoundingClientRect().bottom,
+          viewportHeight: window.innerHeight,
+          scrollMarginTop: Number.parseFloat(getComputedStyle(section).scrollMarginTop),
+        };
+      });
+
+    await expect
+      .poll(async () => {
+        const position = await readPositions();
+        if (!position) return false;
+
+        return (
+          position.targetTop >= Math.max(position.topbarBottom, 0) - 1 &&
+          position.targetTop < position.viewportHeight - 8 &&
+          position.targetBottom > 8 &&
+          position.targetBottom <= position.viewportHeight - 8
+        );
+      })
+      .toBe(true);
+
+    const positions = await readPositions();
 
     expect(positions).not.toBeNull();
     expect(positions?.scrollMarginTop).toBeGreaterThan(0);
-    expect(positions?.targetTop).toBeGreaterThanOrEqual((positions?.topbarBottom ?? 0) - 1);
+    expect(positions?.targetTop).toBeGreaterThanOrEqual(
+      Math.max(positions?.topbarBottom ?? 0, 0) - 1,
+    );
+    expect(positions?.targetTop).toBeLessThan((positions?.viewportHeight ?? 0) - 8);
+    expect(positions?.targetBottom).toBeGreaterThan(8);
+    expect(positions?.targetBottom).toBeLessThanOrEqual((positions?.viewportHeight ?? 0) - 8);
   });
 
   test('reflows without document-level horizontal overflow in narrow and short viewports', async ({ page }) => {
+    await page.getByRole('link', { name: '기능치' }).click();
+    await expect(page.locator('#skills .section-toggle')).toHaveAttribute('aria-expanded', 'true');
+    const skillTableName =
+      (page.viewportSize()?.width ?? 0) > 1120
+        ? '기능치 목록 (왼쪽)'
+        : '기능치 목록 (모바일)';
+    await expect(page.getByRole('table', { name: skillTableName })).toBeVisible();
+
+    await page.getByRole('link', { name: '전투' }).click();
+    await expect(page.locator('#combat .section-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await page.getByRole('button', { name: '권총', pressed: false }).click();
+    await page.getByRole('button', { name: '무기 추가' }).click();
+
+    const handgunTable = page.getByRole('table', { name: '권총 무기 목록' });
+    await expect(handgunTable).toHaveAccessibleName('권총 무기 목록');
+    const combatTableScrollRegion = handgunTable.locator('..');
+    await expect(combatTableScrollRegion).toHaveCSS('overflow-x', 'auto');
+
     const layout = await page.evaluate(() => {
       const sidebar = document.querySelector('.sidebar');
+      const handgunTableElement = Array.from(document.querySelectorAll('table')).find(
+        (table) => table.querySelector('caption')?.textContent?.trim() === '권총 무기 목록',
+      );
+      const tableScrollRegion = handgunTableElement?.parentElement;
+
       return {
         bodyMinWidth: getComputedStyle(document.body).minWidth,
-        documentWidth: document.documentElement.scrollWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        documentClientWidth: document.documentElement.clientWidth,
+        bodyScrollWidth: document.body.scrollWidth,
+        bodyClientWidth: document.body.clientWidth,
         viewportWidth: window.innerWidth,
         sidebarOverflowY: sidebar ? getComputedStyle(sidebar).overflowY : '',
+        combatTableRegion: tableScrollRegion
+          ? {
+              scrollWidth: tableScrollRegion.scrollWidth,
+              clientWidth: tableScrollRegion.clientWidth,
+            }
+          : null,
       };
     });
 
     expect(layout.bodyMinWidth).not.toBe('320px');
-    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.documentScrollWidth).toBeLessThanOrEqual(layout.documentClientWidth);
+    expect(layout.bodyScrollWidth).toBeLessThanOrEqual(layout.bodyClientWidth);
+    expect(layout.documentClientWidth).toBeLessThanOrEqual(layout.viewportWidth);
     expect(layout.sidebarOverflowY).toBe('auto');
+    expect(layout.combatTableRegion).not.toBeNull();
+    if (!layout.combatTableRegion) throw new Error('Missing named combat table scroll region');
+
+    if (layout.viewportWidth <= 1120) {
+      expect(layout.combatTableRegion.scrollWidth).toBeGreaterThan(
+        layout.combatTableRegion.clientWidth,
+      );
+    } else {
+      expect(layout.combatTableRegion.scrollWidth).toBeGreaterThanOrEqual(
+        layout.combatTableRegion.clientWidth,
+      );
+    }
   });
 });
