@@ -238,6 +238,230 @@ describe('App accessibility smoke', () => {
     expect(screen.getByRole('button', { name: '표정 이미지 1 삭제' })).toBeInTheDocument();
   });
 
+  it('limits COC standing images to six and allows another image after deletion', async () => {
+    const user = await renderOpenCocSheet();
+    const addButton = document.querySelector<HTMLButtonElement>(
+      '[data-add-row="coc-standing-image"]',
+    );
+
+    expect(addButton).not.toBeNull();
+    if (!addButton) return;
+
+    for (let index = 0; index < 6; index += 1) {
+      await user.click(addButton);
+    }
+
+    expect(screen.getAllByRole('textbox', { name: /^표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(addButton).toBeDisabled();
+    const hintId = addButton.getAttribute('aria-describedby');
+    expect(hintId).toBeTruthy();
+    const hint = document.getElementById(hintId ?? '');
+    expect(document.querySelectorAll(`[id="${hintId}"]`)).toHaveLength(1);
+    expect(hint).toBeVisible();
+    expect(addButton).toHaveAccessibleDescription(/최대 6개.*현재 6\/6/);
+    expect(hint).toHaveTextContent(
+      '라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다.',
+    );
+    expect(hint).toHaveTextContent('최대 6개');
+    expect(hint).toHaveTextContent('현재 6/6');
+
+    await user.click(addButton);
+    expect(screen.getAllByRole('textbox', { name: /^표정 라벨 \d+$/ })).toHaveLength(6);
+
+    await user.click(screen.getByRole('button', { name: '표정 이미지 6 삭제' }));
+    expect(addButton).toBeEnabled();
+    expect(hint).toHaveTextContent('현재 5/6');
+
+    await act(async () => {
+      addButton.click();
+      addButton.click();
+    });
+
+    expect(screen.getAllByRole('textbox', { name: /^표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(addButton).toBeDisabled();
+  });
+
+  it('limits InSane standing images to six and allows another image after deletion', async () => {
+    const user = await renderOpenInsaneSheet();
+    const addButton = document.querySelector<HTMLButtonElement>(
+      '[data-add-row="insane-standing-image"]',
+    );
+
+    expect(addButton).not.toBeNull();
+    if (!addButton) return;
+
+    for (let index = 0; index < 6; index += 1) {
+      await user.click(addButton);
+    }
+
+    expect(screen.getAllByRole('textbox', { name: /^인세인 표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(addButton).toBeDisabled();
+    const hintId = addButton.getAttribute('aria-describedby');
+    expect(hintId).toBeTruthy();
+    const hint = document.getElementById(hintId ?? '');
+    expect(document.querySelectorAll(`[id="${hintId}"]`)).toHaveLength(1);
+    expect(hint).toBeVisible();
+    expect(addButton).toHaveAccessibleDescription(/최대 6개.*현재 6\/6/);
+    expect(hint).toHaveTextContent(
+      '라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다.',
+    );
+    expect(hint).toHaveTextContent('최대 6개');
+    expect(hint).toHaveTextContent('현재 6/6');
+
+    await user.click(addButton);
+    expect(screen.getAllByRole('textbox', { name: /^인세인 표정 라벨 \d+$/ })).toHaveLength(6);
+
+    await user.click(screen.getByRole('button', { name: '인세인 표정 이미지 6 삭제' }));
+    expect(addButton).toBeEnabled();
+    expect(hint).toHaveTextContent('현재 5/6');
+
+    await act(async () => {
+      addButton.click();
+      addButton.click();
+    });
+
+    expect(screen.getAllByRole('textbox', { name: /^인세인 표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(addButton).toBeDisabled();
+  });
+
+  it.each([
+    {
+      system: 'COC',
+      keyName: 'Enter',
+      key: '{Enter}',
+      addRow: 'coc-standing-image',
+      labelName: '표정 라벨 6',
+      renderSheet: renderOpenCocSheet,
+    },
+    {
+      system: 'COC',
+      keyName: 'Space',
+      key: ' ',
+      addRow: 'coc-standing-image',
+      labelName: '표정 라벨 6',
+      renderSheet: renderOpenCocSheet,
+    },
+    {
+      system: 'InSane',
+      keyName: 'Enter',
+      key: '{Enter}',
+      addRow: 'insane-standing-image',
+      labelName: '인세인 표정 라벨 6',
+      renderSheet: renderOpenInsaneSheet,
+    },
+    {
+      system: 'InSane',
+      keyName: 'Space',
+      key: ' ',
+      addRow: 'insane-standing-image',
+      labelName: '인세인 표정 라벨 6',
+      renderSheet: renderOpenInsaneSheet,
+    },
+  ])(
+    'moves focus to the sixth $system standing-image label after keyboard $keyName disables Add',
+    async ({ key, addRow, labelName, renderSheet }) => {
+      const user = await renderSheet();
+      const addButton = document.querySelector<HTMLButtonElement>(
+        `[data-add-row="${addRow}"]`,
+      );
+
+      expect(addButton).not.toBeNull();
+      if (!addButton) return;
+
+      for (let index = 0; index < 5; index += 1) {
+        await user.click(addButton);
+      }
+
+      addButton.focus();
+      expect(addButton).toHaveFocus();
+      await user.keyboard(key);
+
+      expect(addButton).toBeDisabled();
+      expect(screen.getByRole('textbox', { name: labelName })).toHaveFocus();
+    },
+  );
+
+  it('does not force focus to the sixth COC standing-image label after a pointer click', async () => {
+    const user = await renderOpenCocSheet();
+    const addButton = document.querySelector<HTMLButtonElement>(
+      '[data-add-row="coc-standing-image"]',
+    );
+
+    expect(addButton).not.toBeNull();
+    if (!addButton) return;
+
+    for (let index = 0; index < 5; index += 1) {
+      await user.click(addButton);
+    }
+
+    await user.click(addButton);
+
+    expect(screen.getAllByRole('textbox', { name: /^표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(addButton).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: '표정 라벨 6' })).not.toHaveFocus();
+  });
+
+  it('does not force focus to the sixth InSane label after a rapid pointer double click', async () => {
+    const user = await renderOpenInsaneSheet();
+    const addButton = document.querySelector<HTMLButtonElement>(
+      '[data-add-row="insane-standing-image"]',
+    );
+
+    expect(addButton).not.toBeNull();
+    if (!addButton) return;
+
+    for (let index = 0; index < 5; index += 1) {
+      await user.click(addButton);
+    }
+
+    let sixthLabelReceivedFocus = false;
+    function trackFocus(event: FocusEvent) {
+      if (
+        event.target instanceof HTMLInputElement &&
+        event.target.getAttribute('aria-label') === '인세인 표정 라벨 6'
+      ) {
+        sixthLabelReceivedFocus = true;
+      }
+    }
+
+    document.addEventListener('focusin', trackFocus);
+    try {
+      await user.dblClick(addButton);
+    } finally {
+      document.removeEventListener('focusin', trackFocus);
+    }
+
+    expect(screen.getAllByRole('textbox', { name: /^인세인 표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(addButton).toBeDisabled();
+    expect(sixthLabelReceivedFocus).toBe(false);
+    expect(screen.getByRole('textbox', { name: '인세인 표정 라벨 6' })).not.toHaveFocus();
+  });
+
+  it('clears keyboard focus intent before a later COC pointer re-add', async () => {
+    const user = await renderOpenCocSheet();
+    const addButton = document.querySelector<HTMLButtonElement>(
+      '[data-add-row="coc-standing-image"]',
+    );
+
+    expect(addButton).not.toBeNull();
+    if (!addButton) return;
+
+    for (let index = 0; index < 5; index += 1) {
+      await user.click(addButton);
+    }
+
+    addButton.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('textbox', { name: '표정 라벨 6' })).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: '표정 이미지 6 삭제' }));
+    expect(addButton).toBeEnabled();
+    await user.click(addButton);
+
+    expect(screen.getAllByRole('textbox', { name: /^표정 라벨 \d+$/ })).toHaveLength(6);
+    expect(screen.getByRole('textbox', { name: '표정 라벨 6' })).not.toHaveFocus();
+  });
+
   it('names COC skill controls by row and column and distinguishes every skill table', async () => {
     await renderOpenCocSheet();
 

@@ -134,6 +134,7 @@ import {
 } from './lib/sheet';
 import { detectSheetArchiveSystem, parseSheetArchive, serializeSheetArchive } from './lib/sheetArchive';
 import { splitSkillsIntoColumns } from './lib/skillColumns';
+import { MAX_STANDING_IMAGES } from './lib/standingImages';
 import {
   createAppPath,
   createSheetSectionPath,
@@ -440,6 +441,8 @@ function App() {
   const [secretDiceSelection, setSecretDiceSelection] = useState<string[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
   const resetButtonRef = useRef<HTMLButtonElement>(null);
+  const standingImageLimitLabelRef = useRef<HTMLInputElement>(null);
+  const shouldFocusStandingImageLimitRef = useRef(false);
   const pendingInsanePasswordSubmitRef = useRef<boolean | null>(null);
   const resetDataChangeSuppressionRef = useRef(0);
   const previousResetDataRef = useRef({ sheet, insaneSheet });
@@ -543,6 +546,15 @@ function App() {
   }, [sheet]);
 
   useEffect(() => {
+    if (!shouldFocusStandingImageLimitRef.current) return;
+
+    shouldFocusStandingImageLimitRef.current = false;
+    if (sheet.basic.standingImages.length === MAX_STANDING_IMAGES) {
+      standingImageLimitLabelRef.current?.focus();
+    }
+  }, [sheet.basic.standingImages.length]);
+
+  useEffect(() => {
     if (!isInsaneEnabled || !insaneSheet) return;
     window.localStorage.setItem(insaneStorageKey, JSON.stringify(insaneSheet));
   }, [insaneSheet]);
@@ -611,14 +623,23 @@ function App() {
     setSheet((current) => ({ ...current, basic: { ...current.basic, [key]: value } }));
   }
 
-  function addStandingImage() {
-    setSheet((current) => ({
-      ...current,
-      basic: {
-        ...current.basic,
-        standingImages: [...current.basic.standingImages, { label: '', imageUrl: '' }],
-      },
-    }));
+  function addStandingImage(event: MouseEvent<HTMLButtonElement>) {
+    shouldFocusStandingImageLimitRef.current =
+      event.detail === 0 &&
+      document.activeElement === event.currentTarget &&
+      sheet.basic.standingImages.length === MAX_STANDING_IMAGES - 1;
+
+    setSheet((current) => {
+      if (current.basic.standingImages.length >= MAX_STANDING_IMAGES) return current;
+
+      return {
+        ...current,
+        basic: {
+          ...current.basic,
+          standingImages: [...current.basic.standingImages, { label: '', imageUrl: '' }],
+        },
+      };
+    });
   }
 
   function updateStandingImage(
@@ -1599,18 +1620,32 @@ function App() {
                 <div className="field standing-image-field wide">
                   <div className="field-label-row">
                     <span>표정별 이미지</span>
-                    <button type="button" data-add-row="coc-standing-image" onClick={addStandingImage}>
+                    <button
+                      type="button"
+                      data-add-row="coc-standing-image"
+                      onClick={addStandingImage}
+                      disabled={sheet.basic.standingImages.length >= MAX_STANDING_IMAGES}
+                      aria-describedby="coc-standing-images-hint"
+                    >
                       <Plus size={14} />
                       추가
                     </button>
                   </div>
-                  {sheet.basic.standingImages.length === 0 ? (
-                    <p className="field-hint">라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다.</p>
-                  ) : (
+                  <p id="coc-standing-images-hint" className="field-hint">
+                    라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다. 최대{' '}
+                    {MAX_STANDING_IMAGES}개까지 등록할 수 있습니다. 현재{' '}
+                    {sheet.basic.standingImages.length}/{MAX_STANDING_IMAGES}개입니다.
+                  </p>
+                  {sheet.basic.standingImages.length > 0 && (
                     <div className="standing-image-list">
                       {sheet.basic.standingImages.map((standingImage, index) => (
                         <div className="standing-image-row" key={`standing-image-${index}`}>
                           <input
+                            ref={
+                              index === MAX_STANDING_IMAGES - 1
+                                ? standingImageLimitLabelRef
+                                : undefined
+                            }
                             aria-label={`표정 라벨 ${index + 1}`}
                             placeholder="@미소"
                             value={standingImage.label}
@@ -2703,6 +2738,18 @@ function InsaneSheetView({
   insaneAbilityPresets: InsaneAbilityPreset[];
   onAnnounce: (message: string) => void;
 }) {
+  const standingImageLimitLabelRef = useRef<HTMLInputElement>(null);
+  const shouldFocusStandingImageLimitRef = useRef(false);
+
+  useEffect(() => {
+    if (!shouldFocusStandingImageLimitRef.current) return;
+
+    shouldFocusStandingImageLimitRef.current = false;
+    if (sheet.basic.standingImages.length === MAX_STANDING_IMAGES) {
+      standingImageLimitLabelRef.current?.focus();
+    }
+  }, [sheet.basic.standingImages.length]);
+
   function updateBasic(key: keyof InsaneSheetState['basic'], value: string | number) {
     setSheet((current) => ({
       ...current,
@@ -2713,14 +2760,23 @@ function InsaneSheetView({
     }));
   }
 
-  function addInsaneStandingImage() {
-    setSheet((current) => ({
-      ...current,
-      basic: {
-        ...current.basic,
-        standingImages: [...current.basic.standingImages, { label: '', imageUrl: '' }],
-      },
-    }));
+  function addInsaneStandingImage(event: MouseEvent<HTMLButtonElement>) {
+    shouldFocusStandingImageLimitRef.current =
+      event.detail === 0 &&
+      document.activeElement === event.currentTarget &&
+      sheet.basic.standingImages.length === MAX_STANDING_IMAGES - 1;
+
+    setSheet((current) => {
+      if (current.basic.standingImages.length >= MAX_STANDING_IMAGES) return current;
+
+      return {
+        ...current,
+        basic: {
+          ...current.basic,
+          standingImages: [...current.basic.standingImages, { label: '', imageUrl: '' }],
+        },
+      };
+    });
   }
 
   function updateInsaneStandingImage(
@@ -3061,18 +3117,32 @@ function InsaneSheetView({
             <div className="field standing-image-field wide">
               <div className="field-label-row">
                 <span>표정별 이미지</span>
-                <button type="button" data-add-row="insane-standing-image" onClick={addInsaneStandingImage}>
+                <button
+                  type="button"
+                  data-add-row="insane-standing-image"
+                  onClick={addInsaneStandingImage}
+                  disabled={sheet.basic.standingImages.length >= MAX_STANDING_IMAGES}
+                  aria-describedby="insane-standing-images-hint"
+                >
                   <Plus size={14} />
                   추가
                 </button>
               </div>
-              {sheet.basic.standingImages.length === 0 ? (
-                <p className="field-hint">라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다.</p>
-              ) : (
+              <p id="insane-standing-images-hint" className="field-hint">
+                라벨과 이미지 주소를 추가하면 코코포 팔레트 복사에 함께 포함됩니다. 최대{' '}
+                {MAX_STANDING_IMAGES}개까지 등록할 수 있습니다. 현재{' '}
+                {sheet.basic.standingImages.length}/{MAX_STANDING_IMAGES}개입니다.
+              </p>
+              {sheet.basic.standingImages.length > 0 && (
                 <div className="standing-image-list">
                   {sheet.basic.standingImages.map((standingImage, index) => (
                     <div className="standing-image-row" key={`insane-standing-image-${index}`}>
                       <input
+                        ref={
+                          index === MAX_STANDING_IMAGES - 1
+                            ? standingImageLimitLabelRef
+                            : undefined
+                        }
                         aria-label={`인세인 표정 라벨 ${index + 1}`}
                         placeholder="@미소"
                         value={standingImage.label}
