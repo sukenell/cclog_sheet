@@ -570,23 +570,52 @@ test.describe('accessibility smoke', () => {
     expect(copiedText).toContain('"character": "새로운 탐사자"');
   });
 
-  test('computed control boundaries and placeholder text meet contrast targets', async ({ page }) => {
+  test('legacy input border #444b56 stays below 3:1 while protected contrast remains', async ({
+    page,
+  }) => {
     const nameInput = page.getByRole('textbox', { name: '이름', exact: true });
+    const systemSelect = page.getByRole('combobox', { name: '룰 선택' });
     const menuButton = page.getByRole('button', { name: '사이드바 닫기' });
 
-    const [inputColors, buttonColors] = await Promise.all([
-      nameInput.evaluate((element) => {
+    const readBoundary = (control: Locator) =>
+      control.evaluate((element) => {
         const style = getComputedStyle(element);
         return { border: style.borderTopColor, background: style.backgroundColor };
-      }),
-      menuButton.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return { border: style.borderTopColor, background: style.backgroundColor };
-      }),
+      });
+
+    await page.getByRole('link', { name: '기능치' }).click();
+    const searchBoundary = await readBoundary(page.locator('.search-field'));
+    await page.getByRole('link', { name: '메모' }).click();
+    const memoTextarea = page.getByRole('textbox', { name: '내용' });
+
+    const [nameBoundary, selectBoundary, textareaBoundary, buttonBoundary] = await Promise.all([
+      readBoundary(nameInput),
+      readBoundary(systemSelect),
+      readBoundary(memoTextarea),
+      readBoundary(menuButton),
     ]);
 
-    expect(contrastRatio(inputColors.border, inputColors.background)).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio(buttonColors.border, buttonColors.background)).toBeGreaterThanOrEqual(3);
+    const legacyBoundaries = [
+      ['name input', nameBoundary],
+      ['select', selectBoundary],
+      ['textarea', textareaBoundary],
+      ['search wrapper', searchBoundary],
+    ] as const;
+
+    for (const [label, boundary] of legacyBoundaries) {
+      expect(boundary.border, `${label} uses the user-requested legacy border`).toBe(
+        'rgb(68, 75, 86)',
+      );
+      const ratio = contrastRatio(boundary.border, boundary.background);
+      expect(ratio, `${label} legacy border is approximately 2.0:1`).toBeGreaterThan(1.9);
+      expect(ratio, `${label} legacy border is approximately 2.0:1`).toBeLessThan(2.1);
+      expect(ratio, `${label} is a documented WCAG 1.4.11 exception`).toBeLessThan(3);
+    }
+
+    expect(buttonBoundary.border).toBe('rgb(135, 149, 170)');
+    expect(contrastRatio(buttonBoundary.border, buttonBoundary.background)).toBeGreaterThanOrEqual(
+      3,
+    );
 
     await page.getByRole('link', { name: '세션' }).click();
     await page.getByRole('button', { name: '세션 추가' }).click();
@@ -602,6 +631,8 @@ test.describe('accessibility smoke', () => {
     expect(contrastRatio(placeholderColors.placeholder, placeholderColors.background)).toBeGreaterThanOrEqual(4.5);
     await expect(placeholderInput).toHaveAttribute('placeholder', '다인 & 타이만');
     await expect(nameInput).toBeAttached();
+    await expect(systemSelect).toBeAttached();
+    await expect(memoTextarea).toBeAttached();
     await expect(menuButton).toBeAttached();
   });
 

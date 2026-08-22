@@ -6,6 +6,7 @@
   --panel-3: #3a3f4a;
   --line: #515966;
   --control-border: #8795aa;
+  --input-border: #444b56;
   --focus-ring: #8df0c1;
   --placeholder: #98a5b5;
   --text: #f5f7f4;
@@ -64,7 +65,7 @@ textarea,
 select {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--control-border);
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   background: #151920;
   color: var(--text);
@@ -239,7 +240,7 @@ select:disabled {
   height: 44px;
   padding: 0 9px;
   width: min(100%, 150px);
-  border-color: var(--control-border);
+  border-color: var(--input-border);
   background: rgb(21 25 32 / 0.96);
   color: var(--mint);
   font-size: 0.82rem;
@@ -1242,7 +1243,7 @@ dialog.reset-dialog::backdrop {
   display: flex;
   align-items: center;
   min-width: min(330px, 100%);
-  border: 1px solid var(--control-border);
+  border: 1px solid var(--input-border);
   border-radius: 7px;
   background: #151920;
   padding-left: 10px;
@@ -2068,6 +2069,7 @@ td {
 @media (forced-colors: active) {
   :root {
     --control-border: ButtonText;
+    --input-border: ButtonText;
     --focus-ring: Highlight;
     --placeholder: GrayText;
   }

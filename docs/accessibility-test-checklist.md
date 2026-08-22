@@ -13,8 +13,9 @@
 - `통과`: 현재 코드와 자동 검증에서 적용 범위가 충족됐다.
 - `해당 없음`: 현재 제공하는 콘텐츠나 기능에 해당 유형이 없다. 기능 추가 시 다시 검사해야 한다.
 - `수동 외부 환경 필요`: 자동화만으로 최종 판정할 수 없거나 정책 결정이 남아 있다. 이 상태가 하나라도 남아 있으므로 공식 준수를 주장하지 않는다.
+- `미통과`: 현재 구현이 성공기준을 충족하지 않는다. 알려진 예외가 하나라도 남아 있으므로 공식 준수를 주장하지 않는다.
 
-현재 분포는 `통과 19`, `해당 없음 11`, `수동 외부 환경 필요 3`이다.
+현재 분포는 `통과 18`, `해당 없음 11`, `수동 외부 환경 필요 3`, `미통과 1`이다.
 
 ## 자동 검증 결과
 
@@ -22,7 +23,7 @@
 
 | 명령 | 결과 | 확인 범위 |
 | --- | --- | --- |
-| `npm test` | `20`개 테스트 파일, `186`개 테스트 통과, 실패·보류 `0` | 데이터 로직, DOM 의미 구조, 이름·관계, 탭, 대화상자, 라이브 영역, 삭제 후 포커스, COC axe 검사, 테스트 mock 격리 |
+| `npm test` | `20`개 테스트 파일, `198`개 테스트 통과, 실패·보류 `0` | 데이터 로직, DOM 의미 구조, 이름·관계, 탭, 대화상자, 라이브 영역, 삭제 후 포커스, COC axe 검사, 표정 이미지 6개 제한, 테스트 mock 격리 |
 | `npm run typecheck` | 종료 코드 `0` | 애플리케이션 및 Vite/Playwright TypeScript 설정 |
 | `npm run build` | 종료 코드 `0` | TypeScript, Vite 프로덕션 번들, GitHub Pages 준비 스크립트 |
 | `npm run test:a11y` | 총 `66`건 중 `64`건 통과, 의도적 skip `2`, 실패 `0` | Chromium, 세 viewport, COC/InSane, axe, 키보드, 모달, 리플로우, 대비 및 사용자 설정 |
@@ -57,8 +58,8 @@ Playwright의 `clipboard fallback copies from the active modal top layer and res
 | 5 | 5.3.3 명확한 지시사항 제공 | 통과 | 대화상자 설명, 비밀번호 오류, 초기화 결과가 텍스트로 제공되며 색·위치·소리만으로 지시하지 않음 |
 | 6 | 5.4.1 색에 무관한 콘텐츠 인식 | 통과 | 선택 탭/필터는 ARIA 상태, 굵기와 `currentColor` 밑줄을 함께 사용; E2E forced-colors 검사, 별도 색 막대·점·체크 없음 |
 | 7 | 5.4.2 자동 재생 금지 | 해당 없음 | 자동 재생 오디오가 없음 |
-| 8 | 5.4.3 텍스트 콘텐츠의 명도 대비 | 통과 | E2E axe 색 대비 규칙과 `computed control boundaries and placeholder text...`의 4.5:1 placeholder 검사 |
-| 9 | 5.4.4 콘텐츠 간의 구분 | 통과 | 3:1 이상 컨트롤 경계, 패널/표 경계, 선택 밑줄; E2E computed contrast 및 forced-colors 검사 |
+| 8 | 5.4.3 텍스트 콘텐츠의 명도 대비 | 통과 | E2E axe 색 대비 규칙과 `legacy input border #444b56...`의 4.5:1 placeholder 검사 |
+| 9 | 5.4.4 콘텐츠 간의 구분 | 미통과 | 사용자 요청에 따라 입력·선택·텍스트 영역·검색 래퍼의 기본 경계를 기존 `#444b56`으로 복원했다. `#151920` 배경과 약 `2.00:1`로 3:1에 미달한다. E2E `legacy input border #444b56...`가 이 예외를 명시적으로 검증한다. 버튼 경계 `#8795aa`, 3px 초점 링, 강제 색상 경계는 계속 기준을 충족한다. |
 | 10 | 6.1.1 키보드 사용 보장 | 통과 | skip link, disclosure, 탭 방향키, 모달 Escape/Tab, 좁고 낮은 모달의 checkbox/footer 버튼을 키보드로 실행 |
 | 11 | 6.1.2 초점 이동과 표시 | 통과 | 3px `:focus-visible`, 검색 `:focus-within`, 섹션 이동, 대화상자 최초·복귀 초점, 삭제 후 다음/이전/추가 버튼 초점 |
 | 12 | 6.1.3 조작 가능 | 수동 외부 환경 필요 | 자동 검사는 툴바·주요 필드·비표 액션의 44px 및 대화상자 포인터 조작을 통과. 조밀한 편집표를 실제 모바일 터치로 전수 확인해야 함 |
@@ -89,7 +90,7 @@ Playwright의 `clipboard fallback copies from the active modal top layer and res
 | 성공기준 | 상태 | 증거 |
 | --- | --- | --- |
 | 1.4.10 Reflow | 통과 | 320 CSS px 및 200% 동등 640 CSS px에서 문서 가로 overflow 없음. 이름 있는 표 영역의 내부 가로 스크롤만 허용 |
-| 1.4.11 Non-text Contrast | 통과 | 입력·버튼 경계 3:1 이상 계산, forced-colors 시스템 경계 |
+| 1.4.11 Non-text Contrast | 미통과 | 기본 입력 경계 `#444b56`과 `#151920` 배경은 약 `2.00:1`로 요구되는 3:1에 미달하는 사용자 요청 예외다. 버튼 경계 `#8795aa`는 계속 3:1 이상이고, 키보드 초점과 forced-colors 입력 경계도 기준을 충족한다. |
 | 1.4.12 Text Spacing | 통과 | WCAG 간격 override 후 콘텐츠·기능 손실 및 문서 overflow 없음 |
 | 2.4.11 Focus Not Obscured (Minimum) | 통과 | sticky topbar 아래 섹션 초점과 낮은 모달의 checkbox/footer 초점이 viewport/dialog 안에 보임 |
 | 2.5.7 Dragging Movements | 해당 없음 | 드래그 전용 기능 없음 |
