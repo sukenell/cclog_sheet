@@ -1,4 +1,5 @@
 import { clampPercent } from './character';
+import { MAX_STANDING_IMAGES } from './standingImages';
 
 export interface StandingImage {
   label: string;
@@ -71,7 +72,7 @@ function normalizeStandingImages(value: unknown): StandingImage[] {
     });
   });
 
-  return standingImages;
+  return standingImages.slice(0, MAX_STANDING_IMAGES);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

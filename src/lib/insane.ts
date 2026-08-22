@@ -1,3 +1,5 @@
+import { MAX_STANDING_IMAGES } from './standingImages';
+
 export interface InsaneSkillCategory {
   id: string;
   name: string;
@@ -590,14 +592,17 @@ function normalizeInsaneStandingImages(
     });
   }
 
-  if (standingImages.length > 0) return standingImages;
+  if (standingImages.length > 0) {
+    return standingImages.slice(0, MAX_STANDING_IMAGES);
+  }
 
   return fallbackImageUrls
     .map((imageUrl, index) => ({
       label: `추가 ${index + 1}`,
       imageUrl: imageUrl.trim(),
     }))
-    .filter((item) => item.imageUrl);
+    .filter((item) => item.imageUrl)
+    .slice(0, MAX_STANDING_IMAGES);
 }
 
 function nonNegativeNumber(value: unknown, fallback: number): number {

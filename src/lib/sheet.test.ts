@@ -66,6 +66,22 @@ describe('basic investigator info', () => {
     });
   });
 
+  it('keeps only the first six valid standing images', () => {
+    const validStandingImages = Array.from({ length: 7 }, (_, index) => ({
+      label: `표정 ${index + 1}`,
+      imageUrl: `https://example.com/expression-${index + 1}.png`,
+    }));
+    const standingImages = [
+      validStandingImages[0],
+      { label: '무효', imageUrl: 10 as unknown as string },
+      ...validStandingImages.slice(1),
+    ];
+
+    expect(normalizeBasicInfo({ standingImages }).standingImages).toEqual(
+      validStandingImages.slice(0, 6),
+    );
+  });
+
   it('clears the previously injected player default value', () => {
     expect(normalizeBasicInfo({ player: 'player' }).player).toBe('');
   });

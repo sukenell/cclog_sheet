@@ -101,6 +101,49 @@ describe('inSANe sheet model', () => {
     ]);
   });
 
+  it('keeps only the first six valid labeled standing images', () => {
+    const standingImages = [
+      { label: '   ', imageUrl: 'https://example.com/ignored.png' },
+      ...Array.from({ length: 7 }, (_, index) => ({
+        label: ` @표정 ${index + 1} `,
+        imageUrl: ` https://example.com/expression-${index + 1}.png `,
+      })),
+    ];
+
+    expect(
+      normalizeInsaneSheet({ basic: { standingImages } }).basic.standingImages,
+    ).toEqual(
+      standingImages.slice(1, 7).map(({ label, imageUrl }) => ({
+        label: label.trim(),
+        imageUrl: imageUrl.trim(),
+      })),
+    );
+  });
+
+  it('keeps only six valid legacy standing images while preserving source indexes', () => {
+    const extraImageUrls = [
+      ' https://example.com/one.png ',
+      '',
+      'https://example.com/two.png',
+      'https://example.com/three.png',
+      'https://example.com/four.png',
+      'https://example.com/five.png',
+      'https://example.com/six.png',
+      'https://example.com/seven.png',
+    ];
+
+    expect(
+      normalizeInsaneSheet({ basic: { extraImageUrls } }).basic.standingImages,
+    ).toEqual([
+      { label: '추가 1', imageUrl: 'https://example.com/one.png' },
+      { label: '추가 3', imageUrl: 'https://example.com/two.png' },
+      { label: '추가 4', imageUrl: 'https://example.com/three.png' },
+      { label: '추가 5', imageUrl: 'https://example.com/four.png' },
+      { label: '추가 6', imageUrl: 'https://example.com/five.png' },
+      { label: '추가 7', imageUrl: 'https://example.com/six.png' },
+    ]);
+  });
+
   it('keeps fixed numeric SCP item values in normalized InSane sheets', () => {
     const sheet = normalizeInsaneSheet({
       items: {
